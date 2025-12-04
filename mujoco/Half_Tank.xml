@@ -1,0 +1,118 @@
+<mujoco model="RAY_Unified_HalfTrack_Fixed">
+  <compiler autolimits="true"/>
+
+  <asset>
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .2 .3" rgb2=".2 .3 .4"/>
+    <material name="grid" texture="grid" texrepeat="1 1" texuniform="true" reflectance=".2"/>
+    <mesh name="chassis" file="assets/chassis.stl" scale="0.001 0.001 0.001"/>
+  </asset>
+
+  <default>
+    <joint damping="0.5"/>
+    <default class="standard_wheel">
+      <geom type="cylinder" size=".06 .05" rgba="0.2 0.2 0.2 1" euler="90 0 0" condim="3" friction="2.5 0.005 0.0001"/>
+      <joint type="hinge" axis="0 1 0"/>
+    </default>
+    <default class="track_belt">
+        <geom type="capsule" size=".055" rgba="0.1 0.1 0.1 1" condim="3" friction="1.5 0.005 0.0001"/>
+    </default>
+  </default>
+
+  <worldbody>
+    <geom type="plane" size="3 3 .01" material="grid"/>
+    <light name="top light" pos="0 0 2" mode="trackcom" diffuse=".4 .4 .4"/>
+
+    <body name="car" pos="0 0 .15"> 
+      <freejoint/>
+      <inertial pos="0.1 0 0" mass="10" diaginertia="0.5 0.5 0.8"/>
+
+      <geom name="chassis_visual" type="mesh" mesh="chassis" pos="-0.405 0.275 -0.05" euler="90 0 0" 
+            density="0" contype="0" conaffinity="0" group="1" rgba="1 1 1 0.5"/>
+      
+      <geom name="belly" type="box" size=".3 .15 .04" pos="0 0 0.05" rgba=".8 .2 .2 1"/>
+
+      <body name="left_track_module" pos="0.25 .25 0">
+        <joint name="climb_L" axis="0 1 0" damping="5.0"/> 
+        
+        <geom type="box" size=".20 .055 .05" rgba="0.1 0.1 0.1 1" mass="1" contype="0" conaffinity="0"/>
+
+        <geom class="track_belt" fromto=".13 0 0 0 0 0"/>
+        <geom class="track_belt" fromto="0 0 0 -.13 0 0"/>
+
+        <body name="LT_1" pos=".13 0 0">
+             <joint name="L_T1" class="standard_wheel"/> <geom class="standard_wheel"/>
+        </body>
+        <body name="LT_2" pos="0 0 0">
+             <joint name="L_T2" class="standard_wheel"/> <geom class="standard_wheel"/>
+        </body>
+        <body name="LT_3" pos="-.13 0 0">
+             <joint name="L_T3" class="standard_wheel"/> <geom class="standard_wheel"/>
+        </body>
+      </body>
+
+      <body name="left_wheel_rear" pos="-0.3 0.25 0">
+        <joint name="L_Rear" class="standard_wheel"/>
+        <geom class="standard_wheel"/>
+      </body>
+
+
+      <body name="right_track_module" pos="0.25 -.25 0">
+        <joint name="climb_R" axis="0 1 0" damping="5.0"/>
+        
+        <geom type="box" size=".20 .055 .05" rgba="0.1 0.1 0.1 1" mass="1" contype="0" conaffinity="0"/>
+        
+        <geom class="track_belt" fromto=".13 0 0 0 0 0"/>
+        <geom class="track_belt" fromto="0 0 0 -.13 0 0"/>
+
+        <body name="RT_1" pos=".13 0 0">
+             <joint name="R_T1" class="standard_wheel"/> <geom class="standard_wheel"/>
+        </body>
+        <body name="RT_2" pos="0 0 0">
+             <joint name="R_T2" class="standard_wheel"/> <geom class="standard_wheel"/>
+        </body>
+        <body name="RT_3" pos="-.13 0 0">
+             <joint name="R_T3" class="standard_wheel"/> <geom class="standard_wheel"/>
+        </body>
+      </body>
+
+      <body name="right_wheel_rear" pos="-0.3 -.25 0">
+        <joint name="R_Rear" class="standard_wheel"/>
+        <geom class="standard_wheel"/>
+      </body>
+    </body>
+
+    <body name="stairs" pos="1.5 0 0">
+      <geom type="box" name="step1" size="0.15 0.5 0.05" pos="0 0.00 0.05" rgba="0.6 0.6 0.6 1"/>
+      <geom type="box" name="step2" size="0.15 0.5 0.05" pos="0.30 0 0.15" rgba="0.6 0.6 0.6 1"/>
+      <geom type="box" name="step3" size="0.15 0.5 0.05" pos="0.60 0 0.25" rgba="0.6 0.6 0.6 1"/>
+      <geom type="box" name="step4" size="0.15 0.5 0.05" pos="0.90 0 0.35" rgba="0.6 0.6 0.6 1"/>
+      <geom type="box" name="step5" size="0.15 0.5 0.05" pos="1.20 0 0.45" rgba="0.6 0.6 0.6 1"/>
+    </body>
+  </worldbody>
+
+  <tendon>
+    <fixed name="forward_combined">
+        <joint joint="L_T1" coef="0.5"/> <joint joint="L_T2" coef="0.5"/> <joint joint="L_T3" coef="0.5"/>
+        <joint joint="L_Rear" coef="0.5"/>
+        <joint joint="R_T1" coef="0.5"/> <joint joint="R_T2" coef="0.5"/> <joint joint="R_T3" coef="0.5"/>
+        <joint joint="R_Rear" coef="0.5"/>
+    </fixed>
+
+    <fixed name="turn_combined">
+        <joint joint="L_T1" coef="-0.5"/> <joint joint="L_T2" coef="-0.5"/> <joint joint="L_T3" coef="-0.5"/>
+        <joint joint="L_Rear" coef="-0.5"/>
+        <joint joint="R_T1" coef="0.5"/> <joint joint="R_T2" coef="0.5"/> <joint joint="R_T3" coef="0.5"/>
+        <joint joint="R_Rear" coef="0.5"/>
+    </fixed>
+
+    <fixed name="climb_sync">
+      <joint joint="climb_L" coef="1"/> <joint joint="climb_R" coef="1"/>
+    </fixed>
+  </tendon>
+
+  <actuator>
+    <motor name="drive_forward" tendon="forward_combined" ctrlrange="-1 1" gear="40"/>
+    <motor name="drive_turn" tendon="turn_combined" ctrlrange="-1 1" gear="40"/>
+    <position name="actuator_climb" tendon="climb_sync" ctrlrange="-1 1" kp="800"/> 
+  </actuator>
+</mujoco>
