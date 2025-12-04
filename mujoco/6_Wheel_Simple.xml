@@ -1,0 +1,106 @@
+<mujoco model="RAY_Bogie_Robot">
+  <compiler autolimits="true"/>
+
+  <asset>
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .2 .3" rgb2=".2 .3 .4"/>
+    <material name="grid" texture="grid" texrepeat="1 1" texuniform="true" reflectance=".2"/>
+    <mesh name="chassis" file="assets/chassis.stl" scale="0.001 0.001 0.001"/>
+  </asset>
+
+  <default>
+    <joint damping=".5" actuatorfrcrange="-50 50"/>
+    <default class="wheel">
+      <geom type="cylinder" size=".075 .05" rgba="0 1 .4 1" euler="90 0 0" condim="3" friction="1.5 0.005 0.0001"/>
+      <joint type="hinge" axis="0 1 0"/>
+    </default>
+    <default class="bogie_beam">
+       <geom type="box" size=".15 .005 .005" rgba="1 .5 0 1"/>
+    </default>
+  </default>
+
+  <worldbody>
+    <geom type="plane" size="3 3 .01" material="grid"/>
+    <light name="top light" pos="0 0 2" mode="trackcom" diffuse=".4 .4 .4"/>
+
+    <body name="car" pos="0 0 .15"> 
+      <freejoint/>
+      
+      <inertial pos="0 0 0" mass="10" diaginertia="0.5 0.5 0.8"/>
+
+      <geom name="chassis_geom" type="mesh" mesh="chassis" pos="-0.405 0.275 -0.05" euler="90 0 0" density="0"/>
+      <light name="front light" pos=".1 0 .02" dir="2 0 -1" diffuse="1 1 1"/>
+
+      <body name="left_bogie" pos="0.2 .3 0">
+        <joint name="climb_L" axis="0 1 0" damping="2.0"/> 
+        <geom class="bogie_beam"/>
+        
+        <body name="left_wheel_front" pos=".15 0 0">
+             <joint name="L1" class="wheel"/>
+             <geom class="wheel"/>
+        </body>
+        <body name="left_wheel_mid" pos="-.15 0 0">
+             <joint name="L2" class="wheel"/>
+             <geom class="wheel"/>
+        </body>
+      </body>
+
+      <body name="left_wheel_rear" pos="-0.3 0.2 0">
+        <joint name="L3" class="wheel"/>
+        <geom class="wheel"/>
+      </body>
+
+
+      <body name="right_bogie" pos="0.2 -.3 0">
+        <joint name="climb_R" axis="0 1 0" damping="2.0"/>
+        <geom class="bogie_beam"/>
+
+        <body name="right_wheel_front" pos=".15 0 0">
+            <joint name="R1" class="wheel"/>
+            <geom class="wheel"/>
+        </body>
+        <body name="right_wheel_mid" pos="-.15 0 0">
+            <joint name="R2" class="wheel"/>
+            <geom class="wheel"/>
+        </body>
+      </body>
+
+      <body name="right_wheel_rear" pos="-0.3 -.2 0">
+        <joint name="R3" class="wheel"/>
+        <geom class="wheel"/>
+      </body>
+
+    </body>
+  <!-- Staircase placed 1.2 m in front of chassis -->
+    <body name="stairs" pos="1.2 0 0">
+      <!-- step dims: full width 1.0m (half-size 0.5), depth 0.3m (half 0.15), height 0.1m (half 0.05) -->
+      <geom type="box" name="step1" size="0.15 0.5 0.05" pos="0 0.00 0.05" rgba="0.6 0.6 0.6 1"/>
+      <geom type="box" name="step2" size="0.15 0.5 0.05" pos="0.30 0 0.15" rgba="0.6 0.6 0.6 1"/>
+      <geom type="box" name="step3" size="0.15 0.5 0.05" pos="0.60 0 0.25" rgba="0.6 0.6 0.6 1"/>
+      <geom type="box" name="step4" size="0.15 0.5 0.05" pos="0.90 0 0.35" rgba="0.6 0.6 0.6 1"/>
+      <geom type="box" name="step5" size="0.15 0.5 0.05" pos="1.20 0 0.45" rgba="0.6 0.6 0.6 1"/>
+    </body>
+
+  </worldbody>
+
+  <tendon>
+    <fixed name="forward">
+      <joint joint="L1" coef="0.5"/> <joint joint="L2" coef="0.5"/> <joint joint="L3" coef="0.5"/>
+      <joint joint="R1" coef="0.5"/> <joint joint="R2" coef="0.5"/> <joint joint="R3" coef="0.5"/>
+    </fixed>
+    <fixed name="turn">
+      <joint joint="L1" coef="-0.5"/> <joint joint="L2" coef="-0.5"/> <joint joint="L3" coef="-0.5"/>
+      <joint joint="R1" coef="0.5"/>  <joint joint="R2" coef="0.5"/>  <joint joint="R3" coef="0.5"/>
+    </fixed>
+    <fixed name="climb_sync">
+      <joint joint="climb_L" coef="1"/>
+      <joint joint="climb_R" coef="1"/>
+    </fixed>
+  </tendon>
+
+  <actuator>
+    <motor name="drive_forward" tendon="forward" ctrlrange="-1 1" gear="30"/>
+    <motor name="drive_turn" tendon="turn" ctrlrange="-1 1" gear="30"/>
+    <motor name="actuator_climb" tendon="climb_sync" ctrlrange="-3 3" gear="50"/> 
+  </actuator>
+
+</mujoco>

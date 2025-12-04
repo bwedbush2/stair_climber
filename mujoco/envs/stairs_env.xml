@@ -1,0 +1,9 @@
+<!-- mujoco/envs/stairs_env.xml -->
+<body name="stairs" pos="1.2 0 0">
+  <!-- step dims: full width 1.0m (half-size 0.5), depth 0.3m (half 0.15), height 0.1m (half 0.05) -->
+  <geom type="box" name="step1" size="0.15 0.5 0.05" pos="0    0.00 0.05" rgba="0.6 0.6 0.6 1"/>
+  <geom type="box" name="step2" size="0.15 0.5 0.05" pos="0.30 0    0.15" rgba="0.6 0.6 0.6 1"/>
+  <geom type="box" name="step3" size="0.15 0.5 0.05" pos="0.60 0    0.25" rgba="0.6 0.6 0.6 1"/>
+  <geom type="box" name="step4" size="0.15 0.5 0.05" pos="0.90 0    0.35" rgba="0.6 0.6 0.6 1"/>
+  <geom type="box" name="step5" size="0.15 0.5 0.05" pos="1.20 0    0.45" rgba="0.6 0.6 0.6 1"/>
+</body>
