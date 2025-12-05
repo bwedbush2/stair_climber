@@ -12,7 +12,7 @@ ROBOT_XML = """
       <geom name="chassis_visual" type="mesh" mesh="chassis" pos="-0.405 0.275 -0.05" euler="90 0 0" 
             density="0" contype="0" conaffinity="0" group="1" rgba="1 1 1 0.5"/>
       
-      <geom name="belly" type="box" size=".3 .15 .04" pos="0 0 0.05" rgba=".8 .2 .2 1"/>
+      <geom name="belly" type="box" size=".39 .25 .065" pos="-0.0 0 0.05" rgba=".8 .2 .2 1"/>
 
       <body name="leveling_base" pos="-0.1 0 0.15">
         
@@ -166,7 +166,7 @@ def build_xml(scenario_id):
   <default>
     <joint damping="0.5"/>
     <default class="wheel">
-      <geom type="cylinder" size=".06 .05" rgba="0.2 0.2 0.2 1" euler="90 0 0" condim="3" friction="2.5 0.005 0.0001"/>
+      <geom type="cylinder" size=".1 .05" rgba="0.2 0.2 0.2 1" euler="90 0 0" condim="3" friction="2.5 0.005 0.0001"/>
       <joint type="hinge" axis="0 1 0"/>
     </default>
     <default class="skid_plate">
