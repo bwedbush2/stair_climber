@@ -1,26 +1,20 @@
-<mujoco model="RAY_Delivery_Mission_Extended">
+
+<mujoco model="RAY_Scenario_4">
   <compiler autolimits="true"/>
-
   <statistic center="3 -3 1" extent="10"/>
-
-  <visual>
-    <headlight diffuse=".6 .6 .6" ambient=".3 .3 .3" specular="0 0 0"/>
-    <rgba haze="0.15 0.25 0.35 1"/>
-    <global azimuth="120" elevation="-20"/>
-  </visual>
-
+  
   <asset>
-    <texture name="skybox" type="skybox" builtin="gradient" rgb1=".3 .5 .7" rgb2="0 0 0" width="32" height="32"/>
-    <texture name="asphalt" type="2d" builtin="checker" width="512" height="512" rgb1=".2 .2 .2" rgb2=".3 .3 .3"/>
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .2 .3" rgb2=".2 .3 .4"/>
+    <material name="grid" texture="grid" texrepeat="1 1" texuniform="true" reflectance=".2"/>
     <texture name="concrete" type="2d" builtin="flat" rgb1=".7 .7 .7" width="512" height="512"/>
-    <texture name="metal" type="2d" builtin="flat" rgb1=".4 .5 .6" width="512" height="512"/>
-    <texture name="wood" type="2d" builtin="flat" rgb1=".6 .4 .3" width="512" height="512"/>
-    <texture name="grip_tape" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .1 .1" rgb2=".2 .2 .2"/>
-
-    <material name="asphalt" texture="asphalt" texrepeat="5 5" reflectance=".1"/>
     <material name="concrete" texture="concrete" reflectance=".1"/>
+    <texture name="metal" type="2d" builtin="flat" rgb1=".4 .5 .6" width="512" height="512"/>
     <material name="metal" texture="metal" reflectance=".5"/>
+    <texture name="asphalt" type="2d" builtin="flat" rgb1=".2 .2 .2" width="512" height="512"/>
+    <material name="asphalt" texture="asphalt" reflectance=".1"/>
+    <texture name="wood" type="2d" builtin="flat" rgb1=".6 .4 .3" width="512" height="512"/>
     <material name="wood" texture="wood" reflectance=".1"/>
+    <texture name="grip_tape" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .1 .1" rgb2=".2 .2 .2"/>
     <material name="ramp_surface" texture="grip_tape" texrepeat="2 2" reflectance="0"/>
 
     <mesh name="chassis" file="assets/chassis.stl" scale="0.001 0.001 0.001"/>
@@ -39,61 +33,66 @@
 
   <worldbody>
     <light pos="0 0 10" dir="0 0 -1" directional="true"/>
-
+    
+    
     <geom name="street" type="plane" size="15 15 .1" material="asphalt"/>
-
     <body name="van" pos="0 0 0.6">
-        <geom type="box" size="1.5 1 0.05" material="metal" friction="1 0.005 0.0001"/>
+        <geom type="box" size="1.5 1 0.05" material="metal"/>
         <geom type="box" size="1.5 .05 0.5" pos="0 1.05 0.5" material="metal" rgba=".3 .4 .5 0.5"/>
         <geom type="box" size="1.5 .05 0.5" pos="0 -1.05 0.5" material="metal" rgba=".3 .4 .5 0.5"/>
         <geom type="box" size=".05 1 0.5" pos="-1.55 0 0.5" material="metal" rgba=".3 .4 .5 0.5"/>
     </body>
-
     <body name="ramp" pos="3.0 0 0.32">
         <geom type="box" size="1.6 1 0.05" euler="0 12 0" material="ramp_surface" friction="2.0 0.005 0.0001"/>
     </body>
-
     <body name="sidewalk" pos="4 -3.5 0.075"> 
         <geom type="box" size="5 1.5 0.075" material="concrete"/>
     </body>
-    <body name="path_to_house" pos="4 -6 0.075">
+    <body name="path" pos="4 -6 0.075">
         <geom type="box" size="1 1.5 0.075" material="concrete"/>
     </body>
+    <geom name="s0" type="box" size="1 .2 .1" pos="4 -7.7 0.1" material="concrete"/>
+<geom name="s1" type="box" size="1 .2 .1" pos="4 -8.1 0.2" material="concrete"/>
+<geom name="s2" type="box" size="1 .2 .1" pos="4 -8.5 0.30000000000000004" material="concrete"/>
+<geom name="s3" type="box" size="1 .2 .1" pos="4 -8.9 0.4" material="concrete"/>
+<geom name="s4" type="box" size="1 .2 .1" pos="4 -9.3 0.5" material="concrete"/>
+<geom name="s5" type="box" size="1 .2 .1" pos="4 -9.7 0.6" material="concrete"/>
+<geom name="s6" type="box" size="1 .2 .1" pos="4 -10.100000000000001 0.7000000000000001" material="concrete"/>
+<geom name="s7" type="box" size="1 .2 .1" pos="4 -10.5 0.8" material="concrete"/>
+<geom name="s8" type="box" size="1 .2 .1" pos="4 -10.9 0.9" material="concrete"/>
+<geom name="s9" type="box" size="1 .2 .1" pos="4 -11.3 1.0" material="concrete"/>
 
-    <geom name="s1" type="box" size="1 .2 .1" pos="4 -7.7 0.1" material="concrete"/>
-    <geom name="s2" type="box" size="1 .3 .1" pos="4 -8.2 0.2" material="concrete"/>
-    <geom name="s3" type="box" size="1 .2 .15" pos="4 -8.7 0.35" material="concrete"/>
-    <geom name="s4" type="box" size="1 .15 .1" pos="4 -9.05 0.45" material="concrete"/>
-    <geom name="s5" type="box" size="1 .2 .1" pos="4 -9.4 0.55" material="concrete"/>
-    <geom name="s6" type="box" size="1 .3 .1" pos="4 -9.9 0.65" material="concrete"/>
-    <geom name="s7" type="box" size="1 .2 .1" pos="4 -10.4 0.75" material="concrete"/>
-    <geom name="s8" type="box" size="1 .2 .15" pos="4 -10.8 0.90" material="concrete"/>
-    <geom name="s9" type="box" size="1 .2 .05" pos="4 -11.2 1.00" material="concrete"/>
-    <geom name="s10" type="box" size="1 .2 .1" pos="4 -11.6 1.10" material="concrete"/>
-    
-    <geom name="s11" type="box" size="1 .25 .1" pos="4 -12.05 1.20" material="concrete"/>
-    <geom name="s12" type="box" size="1 .2 .1" pos="4 -12.5 1.30" material="concrete"/>
-    <geom name="s13" type="box" size="1 .2 .1" pos="4 -12.9 1.40" material="concrete"/>
-    <geom name="s14" type="box" size="1 .15 .1" pos="4 -13.25 1.50" material="concrete"/> <geom name="s15" type="box" size="1 .3 .1" pos="4 -13.7 1.60" material="concrete"/>  <geom name="s16" type="box" size="1 .2 .1" pos="4 -14.2 1.70" material="concrete"/>
-    <geom name="s17" type="box" size="1 .2 .1" pos="4 -14.6 1.80" material="concrete"/>
-    <geom name="s18" type="box" size="1 .2 .1" pos="4 -15.0 1.90" material="concrete"/>
-    <geom name="s19" type="box" size="1 .25 .1" pos="4 -15.45 2.00" material="concrete"/>
-    <geom name="s20" type="box" size="1 .2 .1" pos="4 -15.9 2.10" material="concrete"/>
-
-    <body name="porch" pos="4 -17.5 2.1">
+    <body name="porch" pos="4 -12 1.1">
         <geom type="box" size="2 1.2 0.1" material="wood"/>
         <geom type="box" size="1 .1 1.5" pos="0 -1.2 1.5" rgba=".4 .2 .1 1"/>
-        <geom type="sphere" size=".05" pos="0.3 -1.1 1.5" rgba="1 .8 .2 1"/>
     </body>
+    
 
+    
     <body name="car" pos="0 0 0.8"> 
       <freejoint/>
       <inertial pos="0.1 0 0" mass="10" diaginertia="0.5 0.5 0.8"/>
 
       <geom name="chassis_visual" type="mesh" mesh="chassis" pos="-0.405 0.275 -0.05" euler="90 0 0" 
-            density="0" contype="0" conaffinity="0" group="1" rgba="1 1 1 1"/>
-      <geom name="belly" type="box" size=".3 .15 .04" pos="0 0 0.05" rgba=".8 .2 .2 0"/>
+            density="0" contype="0" conaffinity="0" group="1" rgba="1 1 1 0.5"/>
+      
+      <geom name="belly" type="box" size=".3 .15 .04" pos="0 0 0.05" rgba=".8 .2 .2 1"/>
 
+      <body name="leveling_base" pos="-0.1 0 0.15">
+        
+        <joint name="bin_pitch" axis="0 1 0" damping="10.0" range="-60 60"/>
+        
+        <geom type="cylinder" size=".03 .12" euler="90 0 0" rgba=".2 .2 .2 1"/>
+
+        <geom name="platform_flat" type="box" size=".14 .14 .01" pos="0 0 0.04" rgba=".3 .3 .3 1"/>
+
+        <body name="the_bin" pos="0 0 0.05">
+            <inertial pos="0 0 0.1" mass="8" diaginertia="0.1 0.1 0.1"/>
+            <geom name="bin_visual" type="box" size=".13 .13 .12" pos="0 0 0.12" rgba="1 .6 0 1"/>
+            
+            <site name="bin_face" pos=".14 0 0.12" size=".02" rgba="0 1 1 1"/>
+        </body>
+      </body>
       <body name="left_bogie" pos="0.25 .25 0">
         <joint name="climb_L" axis="0 1 0" damping="5.0"/> 
         <geom type="box" size=".15 .04 .01" pos="0 .03 0" rgba="0.5 0.5 0.5 1"/>
@@ -132,6 +131,11 @@
   <actuator>
     <motor name="drive_forward" tendon="forward_combined" ctrlrange="-1 1" gear="40"/>
     <motor name="drive_turn" tendon="turn_combined" ctrlrange="-1 1" gear="40"/>
+    
     <position name="actuator_climb" tendon="climb_sync" ctrlrange="-1.5 1.5" kp="800"/> 
+    
+    <position name="level_bin" joint="bin_pitch" ctrlrange="-1 1" kp="500"/>
   </actuator>
+
 </mujoco>
+    
