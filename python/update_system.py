@@ -48,11 +48,8 @@ ROBOT_XML = """
     </body>
 """
 
-# ... (Include Scenario Generators 1-4 from previous script here) ...
-# For brevity, I am assuming you kept the get_scenario_1, get_scenario_2... functions
-
 # ==========================================
-# 🗺️ SCENARIO GENERATORS (Condensed for display)
+# 🗺️ SCENARIO GENERATORS
 # ==========================================
 
 def get_scenario_1():
@@ -127,7 +124,6 @@ def get_scenario_4():
 # ==========================================
 
 def build_xml(scenario_id):
-    filename = "ray_simulation.xml"
     world_xml = ""
     start_pos = "0 0 0.2"
     
@@ -215,9 +211,33 @@ def build_xml(scenario_id):
 </mujoco>
     """
 
-    with open("ray_simulation.xml", "w") as f:
+    # --- PATH LOGIC ---
+    # Find the 'mujoco' folder whether we are in Root or Python folder
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # 1. Check if 'mujoco' is a subdirectory (Standard Root run)
+    path_root = os.path.join(script_dir, "mujoco")
+    
+    # 2. Check if 'mujoco' is a sibling directory (Run from python/)
+    path_sibling = os.path.join(script_dir, "..", "mujoco")
+    
+    if os.path.exists(path_root):
+        target_dir = path_root
+    elif os.path.exists(path_sibling):
+        target_dir = path_sibling
+    else:
+        # If neither exists, create 'mujoco' in the current directory
+        target_dir = path_root
+        os.makedirs(target_dir, exist_ok=True)
+        print(f"⚠️ 'mujoco' folder not found. Created new one at: {target_dir}")
+
+    output_path = os.path.join(target_dir, "ray_simulation.xml")
+    # Fix slashes for Windows
+    output_path = os.path.normpath(output_path)
+
+    with open(output_path, "w") as f:
         f.write(full_xml)
-    print("✅ Created ray_simulation.xml with Solid Axle & 3 Sensors")
+    print(f"✅ Created file at: {output_path}")
 
 if __name__ == "__main__":
     print("=========================================")
