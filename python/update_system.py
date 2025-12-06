@@ -189,12 +189,14 @@ def build_xml(scenario_id):
       <joint joint="climb_L" coef="1"/> <joint joint="climb_R" coef="1"/>
     </fixed>
   </tendon>
-
+  <equality>
+      <joint joint1="climb_L" joint2="climb_R" polycoef="0 1 0 0 0" solimp="0.99 0.99 0.01" solref="0.005 1"/>
+  </equality>
   <actuator>
     <motor name="drive_forward" tendon="forward_combined" ctrlrange="-1 1" gear="40"/>
     <motor name="drive_turn" tendon="turn_combined" ctrlrange="-1 1" gear="40"/>
     
-    <position name="actuator_climb" tendon="climb_axle" ctrlrange="-1.5 1.5" kp="800"/> 
+    <position name="actuator_climb" joint="climb_L" ctrlrange="-1.5 1.5" kp="10000"/> 
     
     <position name="level_bin" joint="bin_pitch" ctrlrange="-1 1" kp="500"/>
   </actuator>

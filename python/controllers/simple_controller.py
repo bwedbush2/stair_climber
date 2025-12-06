@@ -2,7 +2,8 @@ import time
 import mujoco
 import mujoco.viewer
 import numpy as np
-
+import os 
+import sys 
 # Bin Control Offset
 BIN_OFFSET = 0.0 
 
@@ -21,7 +22,33 @@ def get_chassis_pitch(data, model):
 
 def main():
     print("Loading simulation...")
-    model = mujoco.MjModel.from_xml_path("ray_simulation.xml")
+    # --- CROSS-PLATFORM PATH SETUP ---
+# 1. Get the absolute path to the folder containing THIS script
+#    (Assumes this script is inside: python/controllers/)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
+# 2. Construct the path to the XML file
+#    Structure:
+#      root/
+#      ├── mujoco/
+#      │    └── ray_simulation.xml
+#      └── python/
+#           └── controllers/
+#                └── your_script.py  <-- We are here
+#
+#    Logic: Go UP two levels (".." -> python, ".." -> root), then DOWN into "mujoco"
+xml_folder = os.path.join(script_dir, "..", "..", "mujoco")
+XML_PATH = os.path.join(xml_folder, "ray_simulation.xml")
+
+# 3. Clean the path (resolves '..' and fixes slashes for Windows/Mac)
+XML_PATH = os.path.normpath(XML_PATH)
+
+# --- Verification Print (Optional) ---
+if not os.path.exists(XML_PATH):
+    print(f"Error: XML not found at {XML_PATH}")
+else:
+    print(f"XML found: {XML_PATH}")
+    model = mujoco.MjModel.from_xml_path(XML_PATH)
     data = mujoco.MjData(model)
 
     print("\n=======================================")
