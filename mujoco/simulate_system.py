@@ -26,8 +26,8 @@ ROBOT_XML = """
         </body>
       </body>
 
-      <body name="left_bogie" pos="0.25 .25 0">
-        <joint name="climb_L" axis="0 1 0" damping="5.0"/> 
+    <body name="left_bogie" pos="0.25 .25 0">
+        <joint name="climb_L" axis="0 1 0" damping="50.0"/>
         
         <site name="sens_bogie" pos="0.1 0 0" size=".02" rgba="0 1 0 1"/>
 
@@ -37,9 +37,8 @@ ROBOT_XML = """
         <body name="L_Mid" pos="-.13 0 0"> <joint name="L2" class="wheel"/> <geom class="wheel"/> </body>
       </body>
       <body name="left_wheel_rear" pos="-0.3 0.25 0"> <joint name="L3" class="wheel"/> <geom class="wheel"/> </body>
-
-      <body name="right_bogie" pos="0.25 -.25 0">
-        <joint name="climb_R" axis="0 1 0" damping="5.0"/> 
+    <body name="right_bogie" pos="0.25 -.25 0">
+        <joint name="climb_R" axis="0 1 0" damping="50.0"/>
         <geom type="box" size=".15 .04 .01" pos="0 -.03 0" rgba="0.5 0.5 0.5 1"/>
         <geom class="skid_plate" fromto=".13 0 0 -.13 0 0"/>
         <body name="R_Front" pos=".13 0 0"> <joint name="R1" class="wheel"/> <geom class="wheel"/> </body>
