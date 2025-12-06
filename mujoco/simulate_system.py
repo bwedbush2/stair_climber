@@ -2,7 +2,7 @@ import os
 import sys
 
 # ==========================================
-# 🤖 RAY ROBOT DEFINITION (Active Leveling Platform)
+# 🤖 RAY ROBOT DEFINITION (Solid Axle & 3 Sensors)
 # ==========================================
 ROBOT_XML = """
     <body name="car" pos="{START_POS}"> 
@@ -11,26 +11,26 @@ ROBOT_XML = """
 
       <geom name="chassis_visual" type="mesh" mesh="chassis" pos="-0.405 0.275 -0.05" euler="90 0 0" 
             density="0" contype="0" conaffinity="0" group="1" rgba="1 1 1 0.5"/>
-      
-      <geom name="belly" type="box" size=".39 .25 .065" pos="-0.0 0 0.05" rgba=".8 .2 .2 1"/>
+      <geom name="belly" type="box" size=".3 .15 .04" pos="0 0 0.05" rgba=".8 .2 .2 1"/>
+
+      <site name="sens_chassis" pos="0 0 0.2" size=".02" rgba="1 0 0 1"/>
 
       <body name="leveling_base" pos="-0.1 0 0.15">
-        
         <joint name="bin_pitch" axis="0 1 0" damping="10.0" range="-60 60"/>
-        
         <geom type="cylinder" size=".03 .12" euler="90 0 0" rgba=".2 .2 .2 1"/>
-
         <geom name="platform_flat" type="box" size=".14 .14 .01" pos="0 0 0.04" rgba=".3 .3 .3 1"/>
-
+        
         <body name="the_bin" pos="0 0 0.05">
             <inertial pos="0 0 0.1" mass="8" diaginertia="0.1 0.1 0.1"/>
             <geom name="bin_visual" type="box" size=".13 .13 .12" pos="0 0 0.12" rgba="1 .6 0 1"/>
-            
-            <site name="bin_face" pos=".14 0 0.12" size=".02" rgba="0 1 1 1"/>
         </body>
       </body>
+
       <body name="left_bogie" pos="0.25 .25 0">
         <joint name="climb_L" axis="0 1 0" damping="5.0"/> 
+        
+        <site name="sens_bogie" pos="0.1 0 0" size=".02" rgba="0 1 0 1"/>
+
         <geom type="box" size=".15 .04 .01" pos="0 .03 0" rgba="0.5 0.5 0.5 1"/>
         <geom class="skid_plate" fromto=".13 0 0 -.13 0 0"/>
         <body name="L_Front" pos=".13 0 0"> <joint name="L1" class="wheel"/> <geom class="wheel"/> </body>
@@ -49,8 +49,11 @@ ROBOT_XML = """
     </body>
 """
 
+# ... (Include Scenario Generators 1-4 from previous script here) ...
+# For brevity, I am assuming you kept the get_scenario_1, get_scenario_2... functions
+
 # ==========================================
-# 🗺️ SCENARIO GENERATORS
+# 🗺️ SCENARIO GENERATORS (Condensed for display)
 # ==========================================
 
 def get_scenario_1():
@@ -144,8 +147,6 @@ def build_xml(scenario_id):
     full_xml = f"""
 <mujoco model="RAY_Scenario_{scenario_id}">
   <compiler autolimits="true"/>
-  <statistic center="3 -3 1" extent="10"/>
-  
   <asset>
     <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .2 .3" rgb2=".2 .3 .4"/>
     <material name="grid" texture="grid" texrepeat="1 1" texuniform="true" reflectance=".2"/>
@@ -155,18 +156,17 @@ def build_xml(scenario_id):
     <material name="metal" texture="metal" reflectance=".5"/>
     <texture name="asphalt" type="2d" builtin="flat" rgb1=".2 .2 .2" width="512" height="512"/>
     <material name="asphalt" texture="asphalt" reflectance=".1"/>
-    <texture name="wood" type="2d" builtin="flat" rgb1=".6 .4 .3" width="512" height="512"/>
-    <material name="wood" texture="wood" reflectance=".1"/>
     <texture name="grip_tape" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .1 .1" rgb2=".2 .2 .2"/>
     <material name="ramp_surface" texture="grip_tape" texrepeat="2 2" reflectance="0"/>
-
+    <texture name="wood" type="2d" builtin="flat" rgb1=".6 .4 .3" width="512" height="512"/>
+    <material name="wood" texture="wood" reflectance=".1"/>
     <mesh name="chassis" file="assets/chassis.stl" scale="0.001 0.001 0.001"/>
   </asset>
 
   <default>
     <joint damping="0.5"/>
     <default class="wheel">
-      <geom type="cylinder" size=".1 .05" rgba="0.2 0.2 0.2 1" euler="90 0 0" condim="3" friction="2.5 0.005 0.0001"/>
+      <geom type="cylinder" size=".06 .05" rgba="0.2 0.2 0.2 1" euler="90 0 0" condim="3" friction="2.5 0.005 0.0001"/>
       <joint type="hinge" axis="0 1 0"/>
     </default>
     <default class="skid_plate">
@@ -176,9 +176,7 @@ def build_xml(scenario_id):
 
   <worldbody>
     <light pos="0 0 10" dir="0 0 -1" directional="true"/>
-    
     {world_xml}
-
     {ROBOT_XML.format(START_POS=start_pos)}
   </worldbody>
 
@@ -191,7 +189,8 @@ def build_xml(scenario_id):
         <joint joint="L1" coef="-0.5"/> <joint joint="L2" coef="-0.5"/> <joint joint="L3" coef="-0.5"/>
         <joint joint="R1" coef="0.5"/> <joint joint="R2" coef="0.5"/> <joint joint="R3" coef="0.5"/>
     </fixed>
-    <fixed name="climb_sync">
+    
+    <fixed name="climb_axle">
       <joint joint="climb_L" coef="1"/> <joint joint="climb_R" coef="1"/>
     </fixed>
   </tendon>
@@ -200,21 +199,28 @@ def build_xml(scenario_id):
     <motor name="drive_forward" tendon="forward_combined" ctrlrange="-1 1" gear="40"/>
     <motor name="drive_turn" tendon="turn_combined" ctrlrange="-1 1" gear="40"/>
     
-    <position name="actuator_climb" tendon="climb_sync" ctrlrange="-1.5 1.5" kp="800"/> 
+    <position name="actuator_climb" tendon="climb_axle" ctrlrange="-1.5 1.5" kp="800"/> 
     
     <position name="level_bin" joint="bin_pitch" ctrlrange="-1 1" kp="500"/>
   </actuator>
+  
+  <sensor>
+    <jointpos name="sensor_bin_angle" joint="bin_pitch"/>
+    
+    <actuatorpos name="sensor_bogie_angle" actuator="actuator_climb"/>
+
+    <framequat name="sensor_chassis_quat" objtype="site" objname="sens_chassis"/>
+    <gyro name="sensor_chassis_gyro" site="sens_chassis"/>
+  </sensor>
 
 </mujoco>
     """
 
-    with open(filename, "w") as f:
+    with open("ray_simulation.xml", "w") as f:
         f.write(full_xml)
-    
-    print(f"\n✅ SUCCESS: '{filename}' has been updated to Scenario {scenario_id}.")
-    print("👉 ACTION: Go to Simulate.exe and press 'Ctrl + R' (or 'R') to reload.")
+    print("✅ Created ray_simulation.xml with Solid Axle & 3 Sensors")
 
-def main():
+if __name__ == "__main__":
     print("=========================================")
     print("      RAY ROBOT SCENARIO BUILDER         ")
     print("=========================================")
@@ -235,6 +241,3 @@ def main():
                 print("❌ Please enter a number between 1 and 4.")
         except ValueError:
             print("❌ Invalid input. Please enter a number.")
-
-if __name__ == "__main__":
-    main()
