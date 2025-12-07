@@ -4,6 +4,8 @@ import numpy as np
 import time
 import os
 import sys
+import traj_planning.traj_control
+from traj_planning.traj_control import traj_control
 
 # --- CROSS-PLATFORM PATH SETUP ---
 # 1. Get the absolute path to the folder containing this script
@@ -47,13 +49,14 @@ def controller(model, data):
     id_level = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "level_bin")
 
     # 1. Drive Forward constant
-    data.ctrl[id_drive] = 0.2
-    
+    drive, turn = traj_control(model,data)
+    data.ctrl[id_drive] = drive
+    data.ctrl[id_turn] = turn
     # 2. Steering (Slight sine wave)
     #data.ctrl[id_turn] = 0.1 * np.sin(data.time)
 
     # 3. Lift Bogies
-    data.ctrl[id_climb] = -0.5
+    data.ctrl[id_climb] = 0
 
     # 4. Active Leveling
     chassis_pitch = get_body_pitch(model, data, "car")

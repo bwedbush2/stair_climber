@@ -1,5 +1,6 @@
 import numpy as np
 import mujoco
+import os 
 
 from .create_path import create_path
 
@@ -62,7 +63,7 @@ def _init_if_needed(model, data):
 
     if init_flag == 0.0:
         # First time called: build the path
-        path = create_path(model, data)
+        path = create_path(model, data, 4)
         path = np.asarray(path, dtype=float)
 
         if path.shape[1] != 2:
