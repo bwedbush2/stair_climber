@@ -213,6 +213,7 @@ def build_xml(scenario_id):
     <framequat name="sensor_chassis_quat" objtype="site" objname="sens_chassis"/>
     <gyro name="sensor_chassis_gyro" site="sens_chassis"/>
   </sensor>
+<size nuserdata='2'/>
 
 </mujoco>
     """
