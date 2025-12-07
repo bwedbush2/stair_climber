@@ -87,30 +87,63 @@ def run_simulation():
     except ValueError as e:
         print(f"MuJoCo Load Error: {e}")
         return
-
     data = mujoco.MjData(model)
 
-    # Launch Viewer
-    # The 'launch_passive' function works on both Windows and macOS (inc. Apple Silicon)
+    # Waypoints Setup
+    id_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, 'car')
+    start_pos = model.body_pos[id_body]
+    WAYPOINTS = [
+            start_pos,
+            (5.0, 0.0, 1),      # Ramp bottom
+            (5.0, -3.5, 1),     # Curb approach
+            (4.0, -3.5, 1),     # Curb top
+            (4.0, -7, 1),       # Path
+            (4.0, -10, 1),      # Stairs
+            (4.0, -12, 1),      # Porch
+    ]
+
     with mujoco.viewer.launch_passive(model, data) as viewer:
-        print("\nSimulation Started. Close the window to stop.")
+        print("\nSimulation Started.")
         
-        # Initial Camera Setup
-        viewer.cam.distance = 4.0
-        viewer.cam.lookat[:] = [1.0, 0, 0.5]
+        # Initial Camera
+        viewer.cam.distance = 6.0
+        viewer.cam.lookat[:] = [3.0, -5.0, 1.0]
         
+        # TIMING VARIABLES
+        dt = model.opt.timestep       # Physics timestep (usually 0.002)
+        target_framerate = 30         # Hz (Render speed)
+        render_interval = 1.0 / target_framerate
+        last_render_time = 0.0
+
         while viewer.is_running():
             step_start = time.time()
-            
-            # 1. Controller
-            controller(model, data)
-            
-            # 2. Physics
-            mujoco.mj_step(model, data)
-            
-            # 3. Render
-            viewer.sync()
 
+            # 1. CONTROLLER & PHYSICS
+            # Run physics!
+            controller(model, data)
+            mujoco.mj_step(model, data)
+
+            # 2. RENDER (Only run this if enough time has passed)
+            if data.time - last_render_time >= render_interval:
+                
+                # Update markers only when we render
+                with viewer.lock(): 
+                    # Draw Waypoint Lines
+                    for i in range(len(WAYPOINTS) - 1):
+                        if viewer.user_scn.ngeom >= viewer.user_scn.maxgeom: break
+                        mujoco.mjv_connector(
+                            viewer.user_scn.geoms[viewer.user_scn.ngeom],
+                            type=mujoco.mjtGeom.mjGEOM_CAPSULE,
+                            width=0.05,
+                            from_=np.array(WAYPOINTS[i]),
+                            to=np.array(WAYPOINTS[i+1])
+                        )
+                        viewer.user_scn.geoms[viewer.user_scn.ngeom].rgba = np.array([1, 1, 0, 1])
+                        viewer.user_scn.ngeom += 1
+                
+                # Sync Viewer
+                viewer.sync()
+                last_render_time = data.time
             # 4. Time keeping
             time_until_next_step = model.opt.timestep - (time.time() - step_start)
             if time_until_next_step > 0:
