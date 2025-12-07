@@ -66,7 +66,11 @@ def get_scenario_2():
     return """
     <geom name="floor" type="plane" size="10 10 .1" material="grid"/>
     <geom name="wall" type="box" size="0.2 2 0.5" pos="3 0 0.5" rgba="0.8 0.2 0.2 1"/>
-    <body name="target" pos="3 3 0">
+    <body name="target1" pos="3 3 0">
+        <geom type="sphere" size="0.2" rgba="0 1 0 0.5" contype="0" conaffinity="0"/>
+        <light pos="0 0 2" dir="0 0 -1" diffuse="0 1 0"/>
+    </body>
+    <body name="target2" pos="6 0 0">
         <geom type="sphere" size="0.2" rgba="0 1 0 0.5" contype="0" conaffinity="0"/>
         <light pos="0 0 2" dir="0 0 -1" diffuse="0 1 0"/>
     </body>
