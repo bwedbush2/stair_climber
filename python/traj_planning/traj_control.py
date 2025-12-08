@@ -9,7 +9,7 @@ USERDATA_WP_INDEX  = 1   # current waypoint index (stored as float, cast to int)
 
 # Control gains and parameters
 _K_V = 1.0            # gain on forward error
-_K_W = 1000.0            # gain on heading error
+_K_W = 5.0            # gain on heading error
 _WAYPOINT_TOL = 0.10  # [m] distance at which a waypoint is reached
 _MAX_DRV = 0.5       # clip commands to [-1, 1]
 _MAX_TRN = 1.0
@@ -151,7 +151,10 @@ def traj_control(model, data, scene, time=None):
     desired_heading = np.arctan2(dy, dx)
 
     # Heading error (wrapped to [-pi, pi])
-    heading_error = desired_heading - yaw
+    heading_error = np.arctan2(
+        np.sin(desired_heading - yaw),
+        np.cos(desired_heading - yaw),
+    )
     
     # print(f"Desired Heading = {desired_heading}")
     # print(f"Current Heading = {yaw}")

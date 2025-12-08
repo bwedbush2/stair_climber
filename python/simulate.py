@@ -353,6 +353,7 @@ def run_simulation(scene: int):
             # 2. Render Loop
             if data.time - last_render_time >= render_interval:
                 with viewer.lock(): 
+                    viewer.user_scn.ngeom = 0 
                     # Draw Waypoint Lines
                     for i in range(len(WAYPOINTS) - 1):
                         if viewer.user_scn.ngeom >= viewer.user_scn.maxgeom: break
