@@ -19,7 +19,7 @@ except ImportError:
 
 # 2. Climb Control Import
 try:
-    from controllers.basic_controller import climb_control as current_climb_control
+    from controllers.climbing_controller import climb_control as current_climb_control
 except ImportError:
     print("⚠️ Warning: Could not import controllers file.")
 
