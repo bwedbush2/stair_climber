@@ -46,6 +46,7 @@ XML_PATH = os.path.normpath(XML_PATH)
 # ==========================================
 # 🤖 ROBOT DEFINITION & SCENARIOS
 # ==========================================
+
 ROBOT_XML = """
     <body name="car" pos="{START_POS}"> 
       <freejoint/>
@@ -57,29 +58,36 @@ ROBOT_XML = """
 
       <site name="sens_chassis" pos="0 0 0.2" size=".02" rgba="1 0 0 1"/>
 
+      <body name="laser_array" pos="0.25 0 0">
+        
+        <site name="laser_1_site" pos="0.2 0 0.05" euler="0 135 0" size=".01" rgba="1 0 0 1"/>
+
+        <site name="laser_2_site" pos="0.2 0 0.15" euler="0 135 0" size=".01" rgba="1 0 0 1"/>
+
+        <site name="laser_3_site" pos="0 0 0.35" euler="0 90 0" size=".01" rgba="1 0 0 1"/>
+
+      </body>
       <body name="leveling_base" pos="-0.1 0 0.15">
         <joint name="bin_pitch" axis="0 1 0" damping="10.0" range="-60 60"/>
         <geom type="cylinder" size=".03 .12" euler="90 0 0" rgba=".2 .2 .2 1"/>
         <geom name="platform_flat" type="box" size=".14 .14 .01" pos="0 0 0.04" rgba=".3 .3 .3 1"/>
-        
         <body name="the_bin" pos="0 0 0.05">
             <inertial pos="0 0 0.1" mass="8" diaginertia="0.1 0.1 0.1"/>
             <geom name="bin_visual" type="box" size=".13 .13 .12" pos="0 0 0.12" rgba="1 .6 0 1"/>
         </body>
       </body>
 
-    <body name="left_bogie" pos="0.25 .25 0">
-        <joint name="climb_L" axis="0 1 0" damping="50.0"/>
-        
+      <body name="left_bogie" pos="0.25 .25 0">
+        <joint name="climb_L" axis="0 1 0" damping="50.0"/> 
         <site name="sens_bogie" pos="0.1 0 0" size=".02" rgba="0 1 0 1"/>
-
         <geom type="box" size=".15 .04 .01" pos="0 .03 0" rgba="0.5 0.5 0.5 1"/>
         <geom class="skid_plate" fromto=".13 0 0 -.13 0 0"/>
         <body name="L_Front" pos=".13 0 0"> <joint name="L1" class="wheel"/> <geom class="wheel"/> </body>
         <body name="L_Mid" pos="-.13 0 0"> <joint name="L2" class="wheel"/> <geom class="wheel"/> </body>
       </body>
       <body name="left_wheel_rear" pos="-0.3 0.25 0"> <joint name="L3" class="wheel"/> <geom class="wheel"/> </body>
-    <body name="right_bogie" pos="0.25 -.25 0">
+
+      <body name="right_bogie" pos="0.25 -.25 0">
         <joint name="climb_R" axis="0 1 0" damping="50.0"/>
         <geom type="box" size=".15 .04 .01" pos="0 -.03 0" rgba="0.5 0.5 0.5 1"/>
         <geom class="skid_plate" fromto=".13 0 0 -.13 0 0"/>
@@ -250,6 +258,10 @@ def build_xml(scenario_id):
 
     <framequat name="sensor_chassis_quat" objtype="site" objname="sens_chassis"/>
     <gyro name="sensor_chassis_gyro" site="sens_chassis"/>
+
+    <rangefinder name="floor_sensL" site="laser_1_site"/>
+    <rangefinder name="floor_sensU" site="laser_2_site"/>
+    <rangefinder name="wall_sens" site="laser_3_site"/>
   </sensor>
 <size nuserdata='2'/>
 
@@ -265,11 +277,103 @@ def build_xml(scenario_id):
     except Exception as e:
         print(f"❌ Error writing XML file: {e}")
         return False
+    
 
+def draw_laser_beams(viewer, model, data):
+    """
+    Draws visible lines for the rangefinders.
+    """
+    # 1. Loop through all 3 sensors
+    for i in range(1, 4):
+        sensor_name = f"laser_{i}"
+        site_name = f"laser_{i}_site"
+        
+        try:
+            # Get IDs
+            sens_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR, sensor_name)
+            site_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, site_name)
+            
+            # Get Start Position (The Site)
+            start_pos = data.site_xpos[site_id]
+            
+            # Get Rotation Matrix of the site
+            mat = data.site_xmat[site_id].reshape(3, 3)
+            
+            # Get Range Reading (Distance)
+            # Sensors are usually stored sequentially in sensordata. 
+            # Safer to look up address:
+            adr = model.sensor_adr[sens_id]
+            dist = data.sensordata[adr]
+            
+            # Handle "No Hit" (MuJoCo returns -1 or max range)
+            if dist < 0: dist = 2.0 # Draw a 2m beam if nothing hit
+            
+            # Calculate End Position
+            # Rangefinders usually point along the site's Z-axis (local +Z)
+            # vector = mat @ [0, 0, 1]  <-- MuJoCo standard site Z
+            # But earlier we rotated Y by 45 deg. Let's check direction.
+            # Usually rangefinders shoot along the Site's Z axis.
+            direction = mat[:, 2] # The Z-axis column of the matrix
+            
+            end_pos = start_pos + (direction * dist)
+            
+            # Draw the Line
+            if viewer.user_scn.ngeom < viewer.user_scn.maxgeom:
+                mujoco.mjv_connector(
+                    viewer.user_scn.geoms[viewer.user_scn.ngeom],
+                    type=mujoco.mjtGeom.mjGEOM_CAPSULE,
+                    width=0.01, # Thin beam
+                    from_=start_pos,
+                    to=end_pos
+                )
+                # Color based on distance (Red = Close, Green = Far)
+                if dist < 0.2:
+                    viewer.user_scn.geoms[viewer.user_scn.ngeom].rgba = np.array([1, 0, 0, 1])
+                else:
+                    viewer.user_scn.geoms[viewer.user_scn.ngeom].rgba = np.array([0, 1, 0, 0.5])
+                    
+                viewer.user_scn.ngeom += 1
+                
+                # Draw a dot at the hit point
+                if viewer.user_scn.ngeom < viewer.user_scn.maxgeom:
+                    mujoco.mjv_initGeom(
+                        viewer.user_scn.geoms[viewer.user_scn.ngeom],
+                        type=mujoco.mjtGeom.mjGEOM_SPHERE,
+                        size=[0.02, 0, 0],
+                        pos=end_pos,
+                        mat=np.eye(3).flatten(),
+                        rgba=np.array([1, 0, 0, 1])
+                    )
+                    viewer.user_scn.ngeom += 1
+        except Exception as e:
+            pass # Sensor might not exist yet
+        
+        
 # ==========================================
 # 🎮 SIMULATION CONTROL
 # ==========================================
 
+def get_sensor_value(model, data, sensor_name):
+    """
+    Returns the scalar value of a sensor by name.
+    Returns -1.0 if the sensor name is invalid.
+    """
+    try:
+        # 1. Get the ID of the sensor string
+        sens_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR, sensor_name)
+        
+        # 2. Get the array address (index) for this sensor
+        # (This is needed because some sensors like quaternions use 4 slots)
+        adr = model.sensor_adr[sens_id]
+        
+        # 3. Read the value from the global sensor array
+        # Rangefinders return a single scalar distance (meters)
+        return data.sensordata[adr]
+        
+    except Exception:
+        # Warning: Sensor not found
+        return -1.0
+    
 def get_body_pitch(model, data, body_name):
     """Helper to get the pitch angle (y-axis rotation)."""
     try:
@@ -355,6 +459,7 @@ def run_simulation(scene: int):
                 with viewer.lock(): 
                     viewer.user_scn.ngeom = 0 
                     # Draw Waypoint Lines
+                    draw_laser_beams(viewer, model, data)
                     for i in range(len(WAYPOINTS) - 1):
                         if viewer.user_scn.ngeom >= viewer.user_scn.maxgeom: break
                         mujoco.mjv_connector(
@@ -369,7 +474,18 @@ def run_simulation(scene: int):
                 
                 viewer.sync()
                 last_render_time = data.time
+                if int(data.time * 100) % 30 == 0:
+                        d1 = get_sensor_value(model, data, "floor_sensU")
+                        d2 = get_sensor_value(model, data, "floor_sensL")
+                        d3 = get_sensor_value(model, data, "wall_sens")
+                        print(f"L1(Low): {d1:.3f} | L2(Mid): {d2:.3f} | L3(High): {d3:.3f}")
 
+                        if d3 > 0 and d3 < 0.75:
+                            print("Wall detected")
+                        if d1 - d2 < 0.1:
+                            print("No floor detected! (step)")
+                        else:
+                            print("floor detected! (step)")
             # 3. Time keeping
             time_until_next_step = model.opt.timestep - (time.time() - step_start)
             if time_until_next_step > 0:

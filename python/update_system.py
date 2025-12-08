@@ -15,29 +15,36 @@ ROBOT_XML = """
 
       <site name="sens_chassis" pos="0 0 0.2" size=".02" rgba="1 0 0 1"/>
 
+      <body name="laser_array" pos="0.25 0 0">
+        
+        <site name="laser_1_site" pos="0 0 0.05" euler="0 45 0" size=".01" rgba="1 0 0 1"/>
+
+        <site name="laser_2_site" pos="0 0 0.15" euler="0 45 0" size=".01" rgba="1 0 0 1"/>
+
+        <site name="laser_3_site" pos="0 0 0.5" euler="0 0 0" size=".01" rgba="1 0 0 1"/>
+
+      </body>
       <body name="leveling_base" pos="-0.1 0 0.15">
         <joint name="bin_pitch" axis="0 1 0" damping="10.0" range="-60 60"/>
         <geom type="cylinder" size=".03 .12" euler="90 0 0" rgba=".2 .2 .2 1"/>
         <geom name="platform_flat" type="box" size=".14 .14 .01" pos="0 0 0.04" rgba=".3 .3 .3 1"/>
-        
         <body name="the_bin" pos="0 0 0.05">
             <inertial pos="0 0 0.1" mass="8" diaginertia="0.1 0.1 0.1"/>
             <geom name="bin_visual" type="box" size=".13 .13 .12" pos="0 0 0.12" rgba="1 .6 0 1"/>
         </body>
       </body>
 
-    <body name="left_bogie" pos="0.25 .25 0">
-        <joint name="climb_L" axis="0 1 0" damping="50.0"/>
-        
+      <body name="left_bogie" pos="0.25 .25 0">
+        <joint name="climb_L" axis="0 1 0" damping="50.0"/> 
         <site name="sens_bogie" pos="0.1 0 0" size=".02" rgba="0 1 0 1"/>
-
         <geom type="box" size=".15 .04 .01" pos="0 .03 0" rgba="0.5 0.5 0.5 1"/>
         <geom class="skid_plate" fromto=".13 0 0 -.13 0 0"/>
         <body name="L_Front" pos=".13 0 0"> <joint name="L1" class="wheel"/> <geom class="wheel"/> </body>
         <body name="L_Mid" pos="-.13 0 0"> <joint name="L2" class="wheel"/> <geom class="wheel"/> </body>
       </body>
       <body name="left_wheel_rear" pos="-0.3 0.25 0"> <joint name="L3" class="wheel"/> <geom class="wheel"/> </body>
-    <body name="right_bogie" pos="0.25 -.25 0">
+
+      <body name="right_bogie" pos="0.25 -.25 0">
         <joint name="climb_R" axis="0 1 0" damping="50.0"/>
         <geom type="box" size=".15 .04 .01" pos="0 -.03 0" rgba="0.5 0.5 0.5 1"/>
         <geom class="skid_plate" fromto=".13 0 0 -.13 0 0"/>
@@ -212,6 +219,17 @@ def build_xml(scenario_id):
 
     <framequat name="sensor_chassis_quat" objtype="site" objname="sens_chassis"/>
     <gyro name="sensor_chassis_gyro" site="sens_chassis"/>
+    
+  </sensor>
+  <sensor>
+    <jointpos name="sensor_bin_angle" joint="bin_pitch"/>
+    <actuatorpos name="sensor_bogie_angle" actuator="actuator_climb"/>
+    <framequat name="sensor_chassis_quat" objtype="site" objname="sens_chassis"/>
+    <gyro name="sensor_chassis_gyro" site="sens_chassis"/>
+    
+    <rangefinder name="laser_1" site="laser_1_site"/>
+    <rangefinder name="laser_2" site="laser_2_site"/>
+    <rangefinder name="laser_3" site="laser_3_site"/>
   </sensor>
 <size nuserdata='2'/>
 
