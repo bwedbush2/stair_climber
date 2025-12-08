@@ -44,27 +44,27 @@ def create_path(model, data, scene: int) -> list[tuple[float, float]]:
     # Each list should start at some nominal start position and end at a goal position.
     scenario_paths = {
         1: [
-            (x0, y0),       # start pos
-            (2.0, 0.0),     # goal (middle of curb)
+            (x0, y0, 2),       # start pos
+            (2.0, 0.0, 2),     # goal (middle of curb)
         ],
         2: [
-            (x0, y0),       # start pos
-            (3.0, 3.0),     # target1
-            (6.0, 0.0),      # target2
+            (x0, y0, 2),       # start pos
+            (3.0, 3.0, 2),     # target1
+            (6.0, 0.0, 2),      # target2
         ],
         3: [
-            (x0, y0),       # start pos
-            (1.5, 0),       # top of stairs
-            (3.5, 0),       # goal (downstairs and clearance)
+            (x0, y0, 2),       # start pos
+            (1.5, 0, 2),       # top of stairs
+            (3.5, 0, 2),       # goal (downstairs and clearance)
         ],
         4: [
-            (x0, y0),       # start pos
-            (5.0, 0.0),     # down the ramp
-            (5.0, -3.5),     # up the curb
-            (4.0, -3.5),     # center of the curb
-            (4.0, -7),       # before the stairs
-            (4.0, -10),      # up the stairs
-            (4.0, -12),     # goal (porch)
+            (x0, y0, 2),       # start pos
+            (5.0, 0.0, 2),     # down the ramp
+            (5.0, -3.5, 2),     # up the curb
+            (4.0, -3.5, 2),     # center of the curb
+            (4.0, -7, 2),       # before the stairs
+            (4.0, -10, 2),      # up the stairs
+            (4.0, -12, 2),     # goal (porch)
         ],
     }
 

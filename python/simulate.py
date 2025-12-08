@@ -13,6 +13,7 @@ import sys
 #    Located in: python/traj_planning/traj_control.py
 try:
     from traj_planning.traj_control import traj_control as current_traj_control
+    from traj_planning.create_path import create_path
 except ImportError:
     print("⚠️ Warning: Could not import trajectory controller file")
 
@@ -311,7 +312,7 @@ def controller(model, data):
     chassis_pitch = get_body_pitch(model, data, "car")
     data.ctrl[id_level] = -chassis_pitch 
 
-def run_simulation():
+def run_simulation(scene: int):
     print(f"\n🚀 Loading Simulation from: {XML_PATH}")
 
     if not os.path.exists(XML_PATH):
@@ -326,19 +327,8 @@ def run_simulation():
 
     data = mujoco.MjData(model)
 
-    # Waypoints Setup (for visualization)
-    id_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, 'car')
-    start_pos = model.body_pos[id_body].copy() # Copy to avoid reference issues
-    
-    WAYPOINTS = [
-            start_pos,
-            (5.0, 0.0, 1),      # Ramp bottom
-            (5.0, -3.5, 1),     # Curb approach
-            (4.0, -3.5, 1),     # Curb top
-            (4.0, -7, 1),       # Path
-            (4.0, -10, 1),      # Stairs
-            (4.0, -12, 1),      # Porch
-    ]
+    # Waypoints Setup (for visualization)    
+    WAYPOINTS = create_path(model, data, scene)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         print("\nSimulation Started. Close the window to stop.")
@@ -400,6 +390,7 @@ if __name__ == "__main__":
     
     # 1. Select Scenario
     valid_choice = False
+    choice = 0
     while not valid_choice:
         try:
             selection = input("\nSelect Scenario (1-4): ")
@@ -445,4 +436,4 @@ if __name__ == "__main__":
             print("Please enter 'y' or 'n'.")
 
     # 3. Launch
-    run_simulation()
+    run_simulation(choice)

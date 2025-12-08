@@ -10,9 +10,10 @@ USERDATA_WP_INDEX  = 1   # current waypoint index (stored as float, cast to int)
 
 # Control gains and parameters
 _K_V = 1.0            # gain on forward error
-_K_W = 2.0            # gain on heading error
+_K_W = 1000.0            # gain on heading error
 _WAYPOINT_TOL = 0.10  # [m] distance at which a waypoint is reached
-_MAX_CTRL = 1.0       # clip commands to [-1, 1]
+_MAX_DRV = 0.5       # clip commands to [-1, 1]
+_MAX_TRN = 1.0
 
 # Internal (Python-side) cache for the path only
 _PATH_CACHE = None
@@ -66,9 +67,9 @@ def _init_if_needed(model, data):
         path = create_path(model, data, 4)
         path = np.asarray(path, dtype=float)
 
-        if path.shape[1] != 2:
+        if path.shape[1] != 3:
             raise ValueError(
-                f"create_path must return waypoints with shape (N, 2); "
+                f"create_path must return waypoints with shape (N, 3); "
                 f"got shape {path.shape}"
             )
 
@@ -113,13 +114,14 @@ def traj_control(model, data, time=None):
     x, y, yaw = _get_car_pose(model, data, body_name="car")
 
     # Current target waypoint
-    tx, ty = _PATH_CACHE[wp_idx]
+    tx, ty, tz = _PATH_CACHE[wp_idx]
     dx = tx - x
     dy = ty - y
     dist = np.hypot(dx, dy)
 
     # Check if we reached this waypoint
     if dist < _WAYPOINT_TOL:
+        print(f"Waypoint {wp_idx} reached")
         wp_idx += 1
         data.userdata[USERDATA_WP_INDEX] = float(wp_idx)
 
@@ -128,7 +130,7 @@ def traj_control(model, data, time=None):
             return np.zeros(model.nu, dtype=float)
 
         # Update target to new waypoint
-        tx, ty = _PATH_CACHE[wp_idx]
+        tx, ty, tz = _PATH_CACHE[wp_idx]
         dx = tx - x
         dy = ty - y
         dist = np.hypot(dx, dy)
@@ -149,13 +151,15 @@ def traj_control(model, data, time=None):
         np.cos(desired_heading - yaw),
     )
 
+    #print(heading_error)
+
     # Simple proportional controller for unicycle-like behavior
     v_cmd = _K_V * ex_body          # forward velocity command
     w_cmd = _K_W * heading_error    # turn rate command
 
     # Map to actuators and clip
-    forward_ctrl = np.clip(v_cmd, -_MAX_CTRL, _MAX_CTRL)
-    turn_ctrl = np.clip(w_cmd, -_MAX_CTRL, _MAX_CTRL)
+    forward_ctrl = np.clip(v_cmd, -_MAX_DRV, _MAX_DRV)
+    turn_ctrl = np.clip(w_cmd, -_MAX_TRN, _MAX_TRN)
 
     # Build full control vector
     drive_ctrl = np.array([forward_ctrl, turn_ctrl])
