@@ -281,7 +281,7 @@ def get_body_pitch(model, data, body_name):
     pitch = np.arcsin(2 * (w * y - z * x))
     return pitch
 
-def controller(model, data):
+def controller(model, data, scene):
     """
     Controller logic
     """
@@ -292,7 +292,7 @@ def controller(model, data):
 
     # 1. Drive & Turn (Only if enabled)
     if USE_TRAJECTORY_CONTROL:
-        drive, turn = current_traj_control(model, data)
+        drive, turn = current_traj_control(model, data, scene)
         data.ctrl[id_drive] = drive
         data.ctrl[id_turn] = turn
     # else:
@@ -347,7 +347,7 @@ def run_simulation(scene: int):
             step_start = time.time()
             
             # 1. Controller & Physics
-            controller(model, data)
+            controller(model, data, scene)
             mujoco.mj_step(model, data)
             
             # 2. Render Loop

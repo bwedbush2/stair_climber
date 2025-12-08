@@ -1,6 +1,5 @@
 import numpy as np
 import mujoco
-import os 
 
 from .create_path import create_path
 
@@ -43,7 +42,7 @@ def _get_car_pose(model, data, body_name="car"):
 
 
 # Helper: initialize userdata and path cache
-def _init_if_needed(model, data):
+def _init_if_needed(model, data, scene):
     """
     Initialize path and userdata slots on first call.
     Uses:
@@ -64,7 +63,7 @@ def _init_if_needed(model, data):
 
     if init_flag == 0.0:
         # First time called: build the path
-        path = create_path(model, data, 4)
+        path = create_path(model, data, scene)
         path = np.asarray(path, dtype=float)
 
         if path.shape[1] != 3:
@@ -81,13 +80,14 @@ def _init_if_needed(model, data):
 
 
 # Main controller: follow trajectory in _PATH_CACHE using userdata state
-def traj_control(model, data, time=None):
+def traj_control(model, data, scene, time=None):
     """
     Trajectory-following controller.
 
     Arguments:
       model : mujoco.MjModel
       data  : mujoco.MjData
+      scene : int for the scenario
       time  : (optional) current simulation time, unused here
 
     Returns:
@@ -97,18 +97,20 @@ def traj_control(model, data, time=None):
     """
     global _PATH_CACHE
 
-    _init_if_needed(model, data)
+    _init_if_needed(model, data, scene)
+
+    nu = 2  # number of actuators to control here (just drive and turn)
 
     # If path was not created for some reason, just stop
     if _PATH_CACHE is None or _PATH_CACHE.shape[0] == 0:
-        return np.zeros(model.nu, dtype=float)
+        return np.zeros(nu, dtype=float)
 
     # Read current waypoint index from userdata
     wp_idx = int(data.userdata[USERDATA_WP_INDEX])
 
     # If finished all waypoints, stop
     if wp_idx >= _PATH_CACHE.shape[0]:
-        return np.zeros(model.nu, dtype=float)
+        return np.zeros(nu, dtype=float)
 
     # Current robot pose
     x, y, yaw = _get_car_pose(model, data, body_name="car")
@@ -119,6 +121,9 @@ def traj_control(model, data, time=None):
     dy = ty - y
     dist = np.hypot(dx, dy)
 
+    # print(f"Way-point Target = ({tx},{ty})")
+    # print(f"Current Position = ({x},{y})")
+
     # Check if we reached this waypoint
     if dist < _WAYPOINT_TOL:
         print(f"Waypoint {wp_idx} reached")
@@ -127,7 +132,7 @@ def traj_control(model, data, time=None):
 
         if wp_idx >= _PATH_CACHE.shape[0]:
             # Done with all waypoints
-            return np.zeros(model.nu, dtype=float)
+            return np.zeros(nu, dtype=float)
 
         # Update target to new waypoint
         tx, ty, tz = _PATH_CACHE[wp_idx]
@@ -146,12 +151,11 @@ def traj_control(model, data, time=None):
     desired_heading = np.arctan2(dy, dx)
 
     # Heading error (wrapped to [-pi, pi])
-    heading_error = np.arctan2(
-        np.sin(desired_heading - yaw),
-        np.cos(desired_heading - yaw),
-    )
-
-    #print(heading_error)
+    heading_error = desired_heading - yaw
+    
+    # print(f"Desired Heading = {desired_heading}")
+    # print(f"Current Heading = {yaw}")
+    # print(f"heading error = {heading_error}")
 
     # Simple proportional controller for unicycle-like behavior
     v_cmd = _K_V * ex_body          # forward velocity command
