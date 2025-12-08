@@ -4,128 +4,120 @@ import numpy as np
 import mujoco
 import os
 
-class RayStairEnv(gym.Env):
+class RayFocusedStairs(gym.Env):
     def __init__(self, render_mode=None):
-        super(RayStairEnv, self).__init__()
+        super(RayFocusedStairs, self).__init__()
         
-        # 1. SETUP MUJOCO
+        # 1. SETUP (Load Scenario 3)
+        # We assume you ran 'build_ray.py' -> Option 3 beforehand
         script_dir = os.path.dirname(os.path.abspath(__file__))
         xml_path = os.path.join(script_dir, "..", "mujoco", "ray_simulation.xml")
         xml_path = os.path.normpath(xml_path)
         
         if not os.path.exists(xml_path):
-            raise FileNotFoundError(f"Could not find {xml_path}")
+            raise FileNotFoundError("XML not found! Run 'build_ray.py' (Scenario 3) first.")
 
         self.model = mujoco.MjModel.from_xml_path(xml_path)
         self.data = mujoco.MjData(self.model)
         
-        # IDs
         self.drive_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_forward")
         self.climb_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "actuator_climb")
         self.bin_id   = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "level_bin")
         
-        # 2. ACTION SPACE
-        # Climb Angle Only [-1.5 to 1.5]
-        low  = np.array([-1.5], dtype=np.float32)
-        high = np.array([ 1.5], dtype=np.float32)
-        self.action_space = spaces.Box(low=low, high=high, shape=(1,), dtype=np.float32)
+        # ACTION: Climb Only
+        self.action_space = spaces.Box(low=np.array([-1.5]), high=np.array([1.5]), dtype=np.float32)
 
-        # 3. OBSERVATION SPACE
-        # [Pitch, Roll, Bogie_Angle, FloorL, FloorU, Wall, Velocity]
+        # OBSERVATION: 7 values
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(7,), dtype=np.float32)
 
         self.render_mode = render_mode
         self.viewer = None
-        self.last_action = np.array([0.0]) # For smoothness reward
+        self.last_action = np.array([0.0])
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         mujoco.mj_resetData(self.model, self.data)
         
-        # Spawn at Start (X=0) facing the Stairs (X=2)
-        self.data.qpos[0] = 0.0 
+        # SPAWN: Facing the Stairs (Stairs are at X=2.0)
+        # Start at X=0.5 to get to the action faster
+        self.data.qpos[0] = 0.5 
         self.data.qpos[1] = 0.0 + np.random.uniform(-0.1, 0.1)
         self.data.qpos[2] = 0.2 
         
-        # Reset memory
-        self.last_action = np.array([0.0])
+        # Heading: +X direction (Quat [1, 0, 0, 0])
+        self.data.qpos[3:7] = [1, 0, 0, 0]
         
+        self.last_action = np.array([0.0])
         mujoco.mj_step(self.model, self.data)
         return self._get_obs(), {}
 
     def step(self, action):
-        # 1. ACTIONS
-        # Drive Speed: 0.4 (Lower speed for precision)
-        drive_cmd = 0.4 
+        # 1. Action
+        drive_cmd = 0.4 # Slow, steady speed for learning
         climb_cmd = action[0]
         
         self.data.ctrl[self.drive_id] = drive_cmd
         self.data.ctrl[self.climb_id] = climb_cmd
-        
-        # Auto-Balance Bin
-        pitch = self._get_pitch()
-        self.data.ctrl[self.bin_id] = -pitch
+        self.data.ctrl[self.bin_id] = -self._get_pitch()
 
-        # 2. PHYSICS STEP
+        # 2. Physics (20 steps)
         for _ in range(20):
             mujoco.mj_step(self.model, self.data)
 
-        # 3. REWARDS
+        # 3. REWARDS (SCALED DOWN)
         
-        # A. Progress (Move +X)
+        # A. Forward Progress (Max Velocity is approx 0.5)
+        # Scale: 0.0 to ~2.0
         vel_x = self.data.qvel[0]
-        reward_progress = vel_x * 5.0 
+        reward_progress = vel_x * 4.0 
         
-        # B. Stability
-        reward_stability = -abs(pitch) * 2.0
+        # B. Stability (Penalty)
+        # Scale: 0.0 to -0.5
+        reward_stability = -abs(self._get_pitch()) * 1.0
         
-        # C. Efficiency (Prevent lazy holding or jitter)
-        reward_energy = -np.square(climb_cmd) * 0.5            # Encourage returning to 0
-        reward_smooth = -np.square(climb_cmd - self.last_action[0]) * 10.0 # Prevent jitter
+        # C. Efficiency (Penalty)
+        # Scale: 0.0 to -0.1
+        reward_energy = -np.square(climb_cmd) * 0.1
+        reward_smooth = -np.square(climb_cmd - self.last_action[0]) * 0.5
         
-        # D. Heading (Keep Straight)
-        yaw = self._get_yaw()
-        reward_straight = -abs(yaw) * 2.0
+        # D. Stall Penalty (CRITICAL)
+        # If we are not moving (vel < 0.05) but trying to drive, lose points.
+        # This fixes the "holding legs up forever" bug.
+        reward_stall = 0.0
+        if vel_x < 0.05:
+            reward_stall = -0.5
 
-        total_reward = (
-            reward_progress + 
-            reward_stability + 
-            reward_energy + 
-            reward_smooth + 
-            reward_straight
-        )
-        
+        # TOTAL
+        reward = reward_progress + reward_stability + reward_energy + reward_smooth + reward_stall
         self.last_action = action
 
         # 4. TERMINATION
         terminated = False
         
         # Fail: Flipped
-        if abs(pitch) > 1.0 or abs(self._get_roll()) > 1.0:
+        if abs(self._get_pitch()) > 1.0 or abs(self._get_roll()) > 1.0:
             terminated = True
-            total_reward -= 100.0
+            reward -= 10.0 # Small penalty (not -100)
             
-        # Success: Crossed Pyramid (X > 4.0)
-        if self.data.qpos[0] > 4.0:
+        # Success: Crossed Pyramid (X > 3.5)
+        if self.data.qpos[0] > 3.5:
             terminated = True
-            total_reward += 1000.0
+            reward += 20.0 # Moderate bonus (not +1000)
 
         if self.render_mode == "human":
             self._render_frame()
 
-        return self._get_obs(), total_reward, terminated, False, {}
+        return self._get_obs(), reward, terminated, False, {}
 
+    # --- HELPERS ---
     def _get_obs(self):
         pitch = self._get_pitch()
         roll = self._get_roll()
         bogie = self.data.ctrl[self.climb_id]
         vel = np.linalg.norm(self.data.qvel[:2])
-        
-        # --- NEW SENSOR NAMES ---
         l1 = self._read_sensor("floor_sensL")
         l2 = self._read_sensor("floor_sensU")
         l3 = self._read_sensor("wall_sens")
-        
         return np.array([pitch, roll, bogie, l1, l2, l3, vel], dtype=np.float32)
 
     def _get_pitch(self):
@@ -135,10 +127,6 @@ class RayStairEnv(gym.Env):
     def _get_roll(self):
         q = self.data.qpos[3:7]
         return np.arctan2(2*(q[0]*q[1]+q[2]*q[3]), 1-2*(q[1]**2+q[2]**2))
-        
-    def _get_yaw(self):
-        q = self.data.qpos[3:7]
-        return np.arctan2(2*(q[0]*q[3] + q[1]*q[2]), 1-2*(q[2]**2 + q[3]**2))
 
     def _read_sensor(self, name):
         try:
