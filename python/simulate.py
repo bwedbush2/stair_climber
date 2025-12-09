@@ -245,8 +245,7 @@ def build_xml(scenario_id):
   <actuator>
     <motor name="drive_forward" tendon="forward_combined" ctrlrange="-1 1" gear="40"/>
     <motor name="drive_turn" tendon="turn_combined" ctrlrange="-1 1" gear="40"/>
-    
-    <position name="actuator_climb" joint="climb_L" ctrlrange="-1.5 1.5" kp="10000"/> 
+    <position name="actuator_climb" joint="climb_L" ctrlrange="-1.5 1.5" kp="3000" forcelim="400"/>
     
     <position name="level_bin" joint="bin_pitch" ctrlrange="-1 1" kp="500"/>
   </actuator>
