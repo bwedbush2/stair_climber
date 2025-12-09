@@ -10,43 +10,52 @@ import sys
 # ==========================================
 
 # 1. Trajectory Control Import
-#    Located in: python/traj_planning/traj_control.py
 try:
     from traj_planning.traj_control import traj_control as current_traj_control
     from traj_planning.create_path import create_path
 except ImportError:
-    print("⚠️ Warning: Could not import trajectory controller file")
+    print("⚠️ Warning: Could not import trajectory controller file. Using dummy.")
+    current_traj_control = lambda m, d, s: (0.0, 0.0)
+    create_path = lambda m, d, s: []
 
-# 2. Climb Control Import
+# 2. Climb Control Import (Standard)
 try:
     from controllers.climbing_controller import climb_control as current_climb_control
 except ImportError:
-    print("⚠️ Warning: Could not import controllers file.")
+    pass
+
+# ### --- RL INTEGRATION START --- ###
+# 3. RL Model Import (Stable Baselines3)
+try:
+    from stable_baselines3 import PPO
+    RL_AVAILABLE = True
+except ImportError:
+    print("⚠️ Warning: Stable-Baselines3 not found. RL control disabled.")
+    RL_AVAILABLE = False
+# ### --- RL INTEGRATION END --- ###
 
 # ==========================================
 # ⚙️ GLOBAL SETTINGS
 # ==========================================
-# These flags will be set by the user input at runtime
 USE_TRAJECTORY_CONTROL = True
 USE_CLIMB_CONTROL = True
+USE_RL_FOR_CLIMB = False # Will toggle this in main()
 
 # ==========================================
 # 📂 PATH SETUP
 # ==========================================
-# 1. Get the absolute path to the folder containing this script
 script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# 2. Construct the path to the XML file safely
 xml_folder = os.path.join(script_dir, "..", "mujoco")
 XML_PATH = os.path.join(xml_folder, "ray_simulation.xml")
-
-# 3. Clean the path (resolves '..' and fixes slashes for specific OS)
 XML_PATH = os.path.normpath(XML_PATH)
+
+# Path to your trained model
+MODEL_PATH = "ray_stairs_policy" # Assumes the .zip file is in the same folder
 
 # ==========================================
 # 🤖 ROBOT DEFINITION & SCENARIOS
 # ==========================================
-
+# (Keeping your exact XML definitions)
 ROBOT_XML = """
     <body name="car" pos="{START_POS}"> 
       <freejoint/>
@@ -59,13 +68,9 @@ ROBOT_XML = """
       <site name="sens_chassis" pos="0 0 0.2" size=".02" rgba="1 0 0 1"/>
 
       <body name="laser_array" pos="0.25 0 0">
-        
         <site name="laser_1_site" pos="0.2 0 0.05" euler="0 135 0" size=".01" rgba="1 0 0 1"/>
-
         <site name="laser_2_site" pos="0.2 0 0.15" euler="0 135 0" size=".01" rgba="1 0 0 1"/>
-
         <site name="laser_3_site" pos="0 0 0.35" euler="0 90 0" size=".01" rgba="1 0 0 1"/>
-
       </body>
       <body name="leveling_base" pos="-0.1 0 0.15">
         <joint name="bin_pitch" axis="0 1 0" damping="10.0" range="-60 60"/>
@@ -282,50 +287,36 @@ def draw_laser_beams(viewer, model, data):
     """
     Draws visible lines for the rangefinders.
     """
-    # 1. Loop through all 3 sensors
     for i in range(1, 4):
-        sensor_name = f"laser_{i}"
-        site_name = f"laser_{i}_site"
-        
+        sensor_name = f"laser_{i}" if i <= 3 else "wall_sens" # Handle naming variation
+        # Actually easier to use the explicit names in our XML:
+        if i == 1: s_name = "floor_sensL"; site_name="laser_1_site"
+        elif i == 2: s_name = "floor_sensU"; site_name="laser_2_site"
+        elif i == 3: s_name = "wall_sens"; site_name="laser_3_site"
+
         try:
-            # Get IDs
-            sens_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR, sensor_name)
+            sens_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR, s_name)
             site_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, site_name)
             
-            # Get Start Position (The Site)
             start_pos = data.site_xpos[site_id]
-            
-            # Get Rotation Matrix of the site
             mat = data.site_xmat[site_id].reshape(3, 3)
             
-            # Get Range Reading (Distance)
-            # Sensors are usually stored sequentially in sensordata. 
-            # Safer to look up address:
             adr = model.sensor_adr[sens_id]
             dist = data.sensordata[adr]
             
-            # Handle "No Hit" (MuJoCo returns -1 or max range)
-            if dist < 0: dist = 2.0 # Draw a 2m beam if nothing hit
+            if dist < 0: dist = 2.0 
             
-            # Calculate End Position
-            # Rangefinders usually point along the site's Z-axis (local +Z)
-            # vector = mat @ [0, 0, 1]  <-- MuJoCo standard site Z
-            # But earlier we rotated Y by 45 deg. Let's check direction.
-            # Usually rangefinders shoot along the Site's Z axis.
-            direction = mat[:, 2] # The Z-axis column of the matrix
-            
+            direction = mat[:, 2] 
             end_pos = start_pos + (direction * dist)
             
-            # Draw the Line
             if viewer.user_scn.ngeom < viewer.user_scn.maxgeom:
                 mujoco.mjv_connector(
                     viewer.user_scn.geoms[viewer.user_scn.ngeom],
                     type=mujoco.mjtGeom.mjGEOM_CAPSULE,
-                    width=0.01, # Thin beam
+                    width=0.01,
                     from_=start_pos,
                     to=end_pos
                 )
-                # Color based on distance (Red = Close, Green = Far)
                 if dist < 0.2:
                     viewer.user_scn.geoms[viewer.user_scn.ngeom].rgba = np.array([1, 0, 0, 1])
                 else:
@@ -333,7 +324,6 @@ def draw_laser_beams(viewer, model, data):
                     
                 viewer.user_scn.ngeom += 1
                 
-                # Draw a dot at the hit point
                 if viewer.user_scn.ngeom < viewer.user_scn.maxgeom:
                     mujoco.mjv_initGeom(
                         viewer.user_scn.geoms[viewer.user_scn.ngeom],
@@ -345,36 +335,22 @@ def draw_laser_beams(viewer, model, data):
                     )
                     viewer.user_scn.ngeom += 1
         except Exception as e:
-            pass # Sensor might not exist yet
+            pass 
         
         
 # ==========================================
-# 🎮 SIMULATION CONTROL
+# 🎮 CONTROLLER & HELPERS
 # ==========================================
 
 def get_sensor_value(model, data, sensor_name):
-    """
-    Returns the scalar value of a sensor by name.
-    Returns -1.0 if the sensor name is invalid.
-    """
     try:
-        # 1. Get the ID of the sensor string
         sens_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR, sensor_name)
-        
-        # 2. Get the array address (index) for this sensor
-        # (This is needed because some sensors like quaternions use 4 slots)
         adr = model.sensor_adr[sens_id]
-        
-        # 3. Read the value from the global sensor array
-        # Rangefinders return a single scalar distance (meters)
         return data.sensordata[adr]
-        
     except Exception:
-        # Warning: Sensor not found
         return -1.0
     
 def get_body_pitch(model, data, body_name):
-    """Helper to get the pitch angle (y-axis rotation)."""
     try:
         body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name)
     except Exception:
@@ -384,38 +360,78 @@ def get_body_pitch(model, data, body_name):
     pitch = np.arcsin(2 * (w * y - z * x))
     return pitch
 
-def controller(model, data, scene):
+# ### --- RL OBSERVATION BUILDER --- ###
+def get_rl_observation(model, data):
+    """Reconstructs the 7-value array expected by the trained model"""
+    # 1. Pitch & Roll
+    q = data.qpos[3:7] 
+    pitch = np.arcsin(np.clip(2 * (q[0]*q[2] - q[3]*q[1]), -1, 1))
+    roll  = np.arctan2(2*(q[0]*q[1]+q[2]*q[3]), 1-2*(q[1]**2+q[2]**2))
+    
+    # 2. Bogie Actuator State
+    climb_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "actuator_climb")
+    bogie = data.ctrl[climb_id]
+    
+    # 3. Sensors
+    l1 = get_sensor_value(model, data, "floor_sensL")
+    l2 = get_sensor_value(model, data, "floor_sensU")
+    l3 = get_sensor_value(model, data, "wall_sens")
+    l1 = 2.0 if l1 < 0 else l1
+    l2 = 2.0 if l2 < 0 else l2
+    l3 = 2.0 if l3 < 0 else l3
+
+    # 4. Velocity
+    vel = np.linalg.norm(data.qvel[:2])
+    
+    return np.array([pitch, roll, bogie, l1, l2, l3, vel], dtype=np.float32)
+
+# Global memory for RL smoothing
+rl_filtered_action = 0.0
+
+def controller(model, data, scene, rl_agent=None):
     """
-    Controller logic
+    Main Controller.
+    - Drive/Turn: From Trajectory Planner
+    - Climb: From RL Agent (if enabled) OR Standard Controller
+    - Bin: Automatic Reflex
     """
+    global rl_filtered_action
+    
     id_drive = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_forward")
     id_turn = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_turn")
     id_climb = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "actuator_climb")
     id_level = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "level_bin")
 
-    # 1. Drive & Turn (Only if enabled)
+    # 1. Drive & Turn (Always Trajectory Planner)
     if USE_TRAJECTORY_CONTROL:
         drive, turn = current_traj_control(model, data, scene)
         data.ctrl[id_drive] = drive
         data.ctrl[id_turn] = turn
-    # else:
-    #     # Stop motors if control disabled
-    #     data.ctrl[id_drive] = 0.0
-    #     data.ctrl[id_turn] = 0.0
 
-    # 2. Climb Control (Only if enabled)
+    # 2. Climb Control (RL vs Logic)
     if USE_CLIMB_CONTROL:
-        climb_val = current_climb_control(model, data)
-        data.ctrl[id_climb] = climb_val
-    # else:
-    #     # Default behavior (e.g., hold 0)
-    #     data.ctrl[id_climb] = 0.0
+        if USE_RL_FOR_CLIMB and rl_agent is not None:
+            # --- RL MODE ---
+            # 1. Get Obs
+            obs = get_rl_observation(model, data)
+            # 2. Predict (Deterministic)
+            action, _ = rl_agent.predict(obs, deterministic=True)
+            raw_action = action[0]
+            # 3. Smooth
+            alpha = 0.2
+            rl_filtered_action = (alpha * raw_action) + ((1 - alpha) * rl_filtered_action)
+            # 4. Apply
+            data.ctrl[id_climb] = rl_filtered_action
+        else:
+            # --- STANDARD LOGIC MODE ---
+            climb_val = current_climb_control(model, data)
+            data.ctrl[id_climb] = climb_val
 
     # 3. Active Leveling (Always on)
     chassis_pitch = get_body_pitch(model, data, "car")
     data.ctrl[id_level] = -chassis_pitch 
 
-def run_simulation(scene: int):
+def run_simulation(scene: int, rl_agent=None):
     print(f"\n🚀 Loading Simulation from: {XML_PATH}")
 
     if not os.path.exists(XML_PATH):
@@ -430,17 +446,15 @@ def run_simulation(scene: int):
 
     data = mujoco.MjData(model)
 
-    # Waypoints Setup (for visualization)    
+    # Waypoints Setup  
     WAYPOINTS = create_path(model, data, scene)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         print("\nSimulation Started. Close the window to stop.")
         
-        # Initial Camera Setup
         viewer.cam.distance = 6.0
         viewer.cam.lookat[:] = [3.0, -5.0, 1.0]
         
-        # TIMING VARIABLES
         dt = model.opt.timestep
         target_framerate = 30
         render_interval = 1.0 / target_framerate
@@ -450,15 +464,19 @@ def run_simulation(scene: int):
             step_start = time.time()
             
             # 1. Controller & Physics
-            controller(model, data, scene)
+            controller(model, data, scene, rl_agent)
+            
+            # Physics Step (Replicating the 20-step ratio used in training is optional 
+            # but recommended for RL accuracy. For visual smoothness we do 1 step here)
             mujoco.mj_step(model, data)
             
             # 2. Render Loop
             if data.time - last_render_time >= render_interval:
                 with viewer.lock(): 
                     viewer.user_scn.ngeom = 0 
-                    # Draw Waypoint Lines
                     draw_laser_beams(viewer, model, data)
+                    
+                    # Draw Waypoints
                     for i in range(len(WAYPOINTS) - 1):
                         if viewer.user_scn.ngeom >= viewer.user_scn.maxgeom: break
                         mujoco.mjv_connector(
@@ -473,18 +491,14 @@ def run_simulation(scene: int):
                 
                 viewer.sync()
                 last_render_time = data.time
+                
+                # Debug Prints
                 if int(data.time * 100) % 30 == 0:
                         d1 = get_sensor_value(model, data, "floor_sensU")
                         d2 = get_sensor_value(model, data, "floor_sensL")
                         d3 = get_sensor_value(model, data, "wall_sens")
-                        print(f"L1(Low): {d1:.3f} | L2(Mid): {d2:.3f} | L3(High): {d3:.3f}")
+                        # print(f"L1: {d1:.2f} | L2: {d2:.2f} | L3: {d3:.2f}")
 
-                        if d3 > 0 and d3 < 0.75:
-                            print("Wall detected")
-                        if d1 - d2 < 0.1:
-                            print("No floor detected! (step)")
-                        else:
-                            print("floor detected! (step)")
             # 3. Time keeping
             time_until_next_step = model.opt.timestep - (time.time() - step_start)
             if time_until_next_step > 0:
@@ -526,30 +540,40 @@ if __name__ == "__main__":
     print("-----------------------------------------")
     
     # Trajectory Control
-    valid_traj = False
-    while not valid_traj:
-        user_in = input("Enable Trajectory Control? (y/n): ").strip().lower()
-        if user_in == 'y':
-            USE_TRAJECTORY_CONTROL = True
-            valid_traj = True
-        elif user_in == 'n':
-            USE_TRAJECTORY_CONTROL = False
-            valid_traj = True
-        else:
-            print("Please enter 'y' or 'n'.")
+    if input("Enable Trajectory Control? (y/n): ").lower() == 'n':
+        USE_TRAJECTORY_CONTROL = False
+    else:
+        USE_TRAJECTORY_CONTROL = True
 
     # Climb Control
-    valid_climb = False
-    while not valid_climb:
-        user_in = input("Enable Climb Control? (y/n): ").strip().lower()
-        if user_in == 'y':
-            USE_CLIMB_CONTROL = True
-            valid_climb = True
-        elif user_in == 'n':
-            USE_CLIMB_CONTROL = False
-            valid_climb = True
+    if input("Enable Climb Control? (y/n): ").lower() == 'n':
+        USE_CLIMB_CONTROL = False
+    else:
+        USE_CLIMB_CONTROL = True
+        
+        # ASK FOR RL MODE
+        if RL_AVAILABLE:
+            rl_in = input("   ↳ Use Trained RL Brain for Climbing? (y/n): ").lower()
+            if rl_in == 'y':
+                USE_RL_FOR_CLIMB = True
+            else:
+                USE_RL_FOR_CLIMB = False
+                print("   ↳ Using Standard Logic Controller.")
         else:
-            print("Please enter 'y' or 'n'.")
+            print("   ↳ RL Library missing. Using Standard Logic.")
+            USE_RL_FOR_CLIMB = False
 
-    # 3. Launch
-    run_simulation(choice)
+    # 3. Load Model (If needed)
+    agent = None
+    if USE_RL_FOR_CLIMB:
+        print(f"\n🧠 Loading RL Model: {MODEL_PATH}...")
+        try:
+            agent = PPO.load(MODEL_PATH, device="cpu")
+            print("✅ Model Loaded Successfully!")
+        except Exception as e:
+            print(f"❌ Error loading model: {e}")
+            print("   Falling back to Standard Logic.")
+            USE_RL_FOR_CLIMB = False
+
+    # 4. Launch
+    run_simulation(choice, rl_agent=agent)

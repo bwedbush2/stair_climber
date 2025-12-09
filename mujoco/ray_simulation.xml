@@ -1,5 +1,5 @@
 
-<mujoco model="RAY_Scenario_3">
+<mujoco model="RAY_Scenario_4">
   <compiler autolimits="true"/>
   <asset>
     <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .2 .3" rgb2=".2 .3 .4"/>
@@ -31,21 +31,40 @@
   <worldbody>
     <light pos="0 0 10" dir="0 0 -1" directional="true"/>
     
-    <geom name="floor" type="plane" size="10 10 .1" material="grid"/>
-    <body name="stair_pyramid" pos="2 0 0">
-        <geom name="u1" type="box" size="1 1 .05" pos="0 0 0.05" material="concrete"/>
-        <geom name="u2" type="box" size="1 1 .05" pos="0.3 0 0.15" material="concrete"/>
-        <geom name="u3" type="box" size="1 1 .05" pos="0.6 0 0.25" material="concrete"/>
-        <geom name="u4" type="box" size="1 1 .05" pos="0.9 0 0.35" material="concrete"/>
-        <geom name="plat" type="box" size="1 1 .05" pos="1.5 0 0.45" material="concrete"/>
-        <geom name="d1" type="box" size="1 1 .05" pos="2.1 0 0.35" material="concrete"/>
-        <geom name="d2" type="box" size="1 1 .05" pos="2.4 0 0.25" material="concrete"/>
-        <geom name="d3" type="box" size="1 1 .05" pos="2.7 0 0.15" material="concrete"/>
-        <geom name="d4" type="box" size="1 1 .05" pos="3.0 0 0.05" material="concrete"/>
+    <geom name="street" type="plane" size="15 15 .1" material="asphalt"/>
+    <body name="van" pos="0 0 0.6">
+        <geom type="box" size="1.5 1 0.05" material="metal"/>
+        <geom type="box" size="1.5 .05 0.5" pos="0 1.05 0.5" material="metal" rgba=".3 .4 .5 0.5"/>
+        <geom type="box" size="1.5 .05 0.5" pos="0 -1.05 0.5" material="metal" rgba=".3 .4 .5 0.5"/>
+        <geom type="box" size=".05 1 0.5" pos="-1.55 0 0.5" material="metal" rgba=".3 .4 .5 0.5"/>
+    </body>
+    <body name="ramp" pos="3.0 0 0.32">
+        <geom type="box" size="1.6 1 0.05" euler="0 12 0" material="ramp_surface" friction="2.0 0.005 0.0001"/>
+    </body>
+    <body name="sidewalk" pos="4 -3.5 0.075"> 
+        <geom type="box" size="5 1.5 0.075" material="concrete"/>
+    </body>
+    <body name="path" pos="4 -6 0.075">
+        <geom type="box" size="1 1.5 0.075" material="concrete"/>
+    </body>
+    <geom name="s0" type="box" size="1 .2 .1" pos="4 -7.7 0.1" material="concrete"/>
+<geom name="s1" type="box" size="1 .2 .1" pos="4 -8.1 0.2" material="concrete"/>
+<geom name="s2" type="box" size="1 .2 .1" pos="4 -8.5 0.30000000000000004" material="concrete"/>
+<geom name="s3" type="box" size="1 .2 .1" pos="4 -8.9 0.4" material="concrete"/>
+<geom name="s4" type="box" size="1 .2 .1" pos="4 -9.3 0.5" material="concrete"/>
+<geom name="s5" type="box" size="1 .2 .1" pos="4 -9.7 0.6" material="concrete"/>
+<geom name="s6" type="box" size="1 .2 .1" pos="4 -10.100000000000001 0.7000000000000001" material="concrete"/>
+<geom name="s7" type="box" size="1 .2 .1" pos="4 -10.5 0.8" material="concrete"/>
+<geom name="s8" type="box" size="1 .2 .1" pos="4 -10.9 0.9" material="concrete"/>
+<geom name="s9" type="box" size="1 .2 .1" pos="4 -11.3 1.0" material="concrete"/>
+
+    <body name="porch" pos="4 -12 1.1">
+        <geom type="box" size="2 1.2 0.1" material="wood"/>
+        <geom type="box" size="1 .1 1.5" pos="0 -1.2 1.5" rgba=".4 .2 .1 1"/>
     </body>
     
     
-    <body name="car" pos="0 0 0.2"> 
+    <body name="car" pos="0 0 0.8"> 
       <freejoint/>
       <inertial pos="0.1 0 0" mass="10" diaginertia="0.5 0.5 0.8"/>
 
@@ -56,13 +75,9 @@
       <site name="sens_chassis" pos="0 0 0.2" size=".02" rgba="1 0 0 1"/>
 
       <body name="laser_array" pos="0.25 0 0">
-        
         <site name="laser_1_site" pos="0.2 0 0.05" euler="0 135 0" size=".01" rgba="1 0 0 1"/>
-
         <site name="laser_2_site" pos="0.2 0 0.15" euler="0 135 0" size=".01" rgba="1 0 0 1"/>
-
         <site name="laser_3_site" pos="0 0 0.35" euler="0 90 0" size=".01" rgba="1 0 0 1"/>
-
       </body>
       <body name="leveling_base" pos="-0.1 0 0.15">
         <joint name="bin_pitch" axis="0 1 0" damping="10.0" range="-60 60"/>
@@ -116,8 +131,7 @@
   <actuator>
     <motor name="drive_forward" tendon="forward_combined" ctrlrange="-1 1" gear="40"/>
     <motor name="drive_turn" tendon="turn_combined" ctrlrange="-1 1" gear="40"/>
-    
-    <position name="actuator_climb" joint="climb_L" ctrlrange="-1.5 1.5" kp="10000"/> 
+    <position name="actuator_climb" joint="climb_L" ctrlrange="-1.5 1.5" kp="3000" forcerange="-400 400"/>
     
     <position name="level_bin" joint="bin_pitch" ctrlrange="-1 1" kp="500"/>
   </actuator>
