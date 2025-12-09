@@ -26,7 +26,7 @@ def main():
     print("🏋️‍♂️ Training Focused Stair Climber...")
     try:
         # 1 Million steps on this focused task is ALOT. It should solve it in 200k.
-        model.learn(total_timesteps=35000000)
+        model.learn(total_timesteps=3*1e9)
         model.save("ray_stairs_policy")
         print("✅ Saved 'ray_stairs_policy.zip'")
     except KeyboardInterrupt:
