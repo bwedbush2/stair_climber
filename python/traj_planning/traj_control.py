@@ -1,5 +1,7 @@
 import numpy as np
 import mujoco
+from .traj_controllers.traj_pid import traj_pid as pid_control
+#from .traj_controllers.traj_mpc import traj_mpc as mpc_control
 
 from .create_path import create_path
 
@@ -7,9 +9,7 @@ from .create_path import create_path
 USERDATA_INIT_FLAG = 0   # 0.0 = not initialized, 1.0 = initialized
 USERDATA_WP_INDEX  = 1   # current waypoint index (stored as float, cast to int)
 
-# Control gains and parameters
-_K_V = 1.0            # gain on forward error
-_K_W = 5.0            # gain on heading error
+# Parameters
 _WAYPOINT_TOL = 0.10  # [m] distance at which a waypoint is reached
 _MAX_DRV = 0.5       # clip commands to [-1, 1]
 _MAX_TRN = 1.0
@@ -82,7 +82,8 @@ def _init_if_needed(model, data, scene):
 # Main controller: follow trajectory in _PATH_CACHE using userdata state
 def traj_control(model, data, scene, time=None):
     """
-    Trajectory-following controller.
+    Trajectory-following controller. Modularity with either PID or
+    MPC controller
 
     Arguments:
       model : mujoco.MjModel
@@ -116,7 +117,7 @@ def traj_control(model, data, scene, time=None):
     x, y, yaw = _get_car_pose(model, data, body_name="car")
 
     # Current target waypoint
-    tx, ty, tz = _PATH_CACHE[wp_idx]
+    tx, ty, _ = _PATH_CACHE[wp_idx]
     dx = tx - x
     dy = ty - y
     dist = np.hypot(dx, dy)
@@ -135,34 +136,12 @@ def traj_control(model, data, scene, time=None):
             return np.zeros(nu, dtype=float)
 
         # Update target to new waypoint
-        tx, ty, tz = _PATH_CACHE[wp_idx]
+        tx, ty, _ = _PATH_CACHE[wp_idx]
         dx = tx - x
         dy = ty - y
         dist = np.hypot(dx, dy)
 
-    # Transform position error into body frame
-    cos_yaw = np.cos(yaw)
-    sin_yaw = np.sin(yaw)
-
-    ex_body = cos_yaw * dx + sin_yaw * dy      # forward error
-    ey_body = -sin_yaw * dx + cos_yaw * dy     # lateral error (not used)
-
-    # Desired heading to waypoint
-    desired_heading = np.arctan2(dy, dx)
-
-    # Heading error (wrapped to [-pi, pi])
-    heading_error = np.arctan2(
-        np.sin(desired_heading - yaw),
-        np.cos(desired_heading - yaw),
-    )
-    
-    # print(f"Desired Heading = {desired_heading}")
-    # print(f"Current Heading = {yaw}")
-    # print(f"heading error = {heading_error}")
-
-    # Simple proportional controller for unicycle-like behavior
-    v_cmd = _K_V * ex_body          # forward velocity command
-    w_cmd = _K_W * heading_error    # turn rate command
+    v_cmd, w_cmd = pid_control(dx, dy, yaw)
 
     # Map to actuators and clip
     forward_ctrl = np.clip(v_cmd, -_MAX_DRV, _MAX_DRV)

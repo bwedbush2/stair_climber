@@ -14,8 +14,10 @@ import sys
 try:
     from traj_planning.traj_control import traj_control as current_traj_control
     from traj_planning.create_path import create_path
-except ImportError:
+except ImportError as e:
     print("⚠️ Warning: Could not import trajectory controller file")
+    print("ImportError details:", e)
+    raise
 
 # 2. Climb Control Import
 try:
