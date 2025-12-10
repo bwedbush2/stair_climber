@@ -1,5 +1,5 @@
 
-<mujoco model="RAY_Scenario_2">
+<mujoco model="RAY_Scenario_4">
   <compiler autolimits="true"/>
   <asset>
     <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .2 .3" rgb2=".2 .3 .4"/>
@@ -31,19 +31,40 @@
   <worldbody>
     <light pos="0 0 10" dir="0 0 -1" directional="true"/>
     
-    <geom name="floor" type="plane" size="10 10 .1" material="grid"/>
-    <geom name="wall" type="box" size="0.2 2 0.5" pos="3 0 0.5" rgba="0.8 0.2 0.2 1"/>
-    <body name="target1" pos="3 3 0">
-        <geom type="sphere" size="0.2" rgba="0 1 0 0.5" contype="0" conaffinity="0"/>
-        <light pos="0 0 2" dir="0 0 -1" diffuse="0 1 0"/>
+    <geom name="street" type="plane" size="15 15 .1" material="asphalt"/>
+    <body name="van" pos="0 0 0.6">
+        <geom type="box" size="1.5 1 0.05" material="metal"/>
+        <geom type="box" size="1.5 .05 0.5" pos="0 1.05 0.5" material="metal" rgba=".3 .4 .5 0.5"/>
+        <geom type="box" size="1.5 .05 0.5" pos="0 -1.05 0.5" material="metal" rgba=".3 .4 .5 0.5"/>
+        <geom type="box" size=".05 1 0.5" pos="-1.55 0 0.5" material="metal" rgba=".3 .4 .5 0.5"/>
     </body>
-    <body name="target2" pos="6 0 0">
-        <geom type="sphere" size="0.2" rgba="0 1 0 0.5" contype="0" conaffinity="0"/>
-        <light pos="0 0 2" dir="0 0 -1" diffuse="0 1 0"/>
+    <body name="ramp" pos="3.0 0 0.32">
+        <geom type="box" size="1.6 1 0.05" euler="0 12 0" material="ramp_surface" friction="2.0 0.005 0.0001"/>
+    </body>
+    <body name="sidewalk" pos="4 -3.5 0.075"> 
+        <geom type="box" size="5 1.5 0.075" material="concrete"/>
+    </body>
+    <body name="path" pos="4 -6 0.075">
+        <geom type="box" size="1 1.5 0.075" material="concrete"/>
+    </body>
+    <geom name="s0" type="box" size="1 .2 .1" pos="4 -7.7 0.1" material="concrete"/>
+<geom name="s1" type="box" size="1 .2 .1" pos="4 -8.1 0.2" material="concrete"/>
+<geom name="s2" type="box" size="1 .2 .1" pos="4 -8.5 0.30000000000000004" material="concrete"/>
+<geom name="s3" type="box" size="1 .2 .1" pos="4 -8.9 0.4" material="concrete"/>
+<geom name="s4" type="box" size="1 .2 .1" pos="4 -9.3 0.5" material="concrete"/>
+<geom name="s5" type="box" size="1 .2 .1" pos="4 -9.7 0.6" material="concrete"/>
+<geom name="s6" type="box" size="1 .2 .1" pos="4 -10.100000000000001 0.7000000000000001" material="concrete"/>
+<geom name="s7" type="box" size="1 .2 .1" pos="4 -10.5 0.8" material="concrete"/>
+<geom name="s8" type="box" size="1 .2 .1" pos="4 -10.9 0.9" material="concrete"/>
+<geom name="s9" type="box" size="1 .2 .1" pos="4 -11.3 1.0" material="concrete"/>
+
+    <body name="porch" pos="4 -12 1.1">
+        <geom type="box" size="2 1.2 0.1" material="wood"/>
+        <geom type="box" size="1 .1 1.5" pos="0 -1.2 1.5" rgba=".4 .2 .1 1"/>
     </body>
     
     
-    <body name="car" pos="0 0 0.2"> 
+    <body name="car" pos="0 0 0.8"> 
       <freejoint/>
       <inertial pos="0.1 0 0" mass="10" diaginertia="0.5 0.5 0.8"/>
 

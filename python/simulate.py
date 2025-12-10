@@ -21,7 +21,7 @@ except ImportError as e:
 
 # 2. Climb Control Import
 try:
-    from controllers.climbing_controller import climb_control as current_climb_control
+    from controllers.sensor_based_climb_controller import climb_control as current_climb_control
 except ImportError:
     print("⚠️ Warning: Could not import controllers file.")
 
@@ -388,7 +388,7 @@ def get_body_pitch(model, data, body_name):
 
 def controller(model, data, scene):
     """
-    Controller logic
+    Controller logic with added Stuck Assist.
     """
     id_drive = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_forward")
     id_turn = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_turn")
@@ -400,22 +400,44 @@ def controller(model, data, scene):
         drive, turn = current_traj_control(model, data, scene)
         data.ctrl[id_drive] = drive
         data.ctrl[id_turn] = turn
-    # else:
-    #     # Stop motors if control disabled
-    #     data.ctrl[id_drive] = 0.0
-    #     data.ctrl[id_turn] = 0.0
 
     # 2. Climb Control (Only if enabled)
     if USE_CLIMB_CONTROL:
         climb_val = current_climb_control(model, data)
         data.ctrl[id_climb] = climb_val
-    # else:
-    #     # Default behavior (e.g., hold 0)
-    #     data.ctrl[id_climb] = 0.0
+
+        # ====================================================
+        # 🚀 NEW LOGIC: STUCK ASSIST
+        # ====================================================
+        # If velocity is near 0 and top sensor is clear, boost throttle
+        
+        # A. Get Velocity
+        # qvel[0] and qvel[1] are X and Y linear velocities of the chassis
+        speed = np.linalg.norm(data.qvel[0:2])
+        
+        # B. Get Top Sensor ("wall_sens")
+        # Returns -1 if no hit (infinite), or distance in meters
+        d_wall = get_sensor_value(model, data, "wall_sens")
+        
+        # C. Check Conditions
+        # - Speed < 0.05: Robot is effectively stopped
+        # - d_wall == -1 or > 0.5: No obstacle immediately in front
+        is_stuck = speed < 0.05
+        path_clear = (d_wall == -1) or (d_wall > 0.5)
+        
+        if is_stuck and path_clear:
+            current_throttle = data.ctrl[id_drive]
+            
+            # Boost throttle by 0.2 in the direction of travel
+            # (We check > 0.01 to ensure we don't accidentally drive when parked)
+            if current_throttle > 0.01:
+                data.ctrl[id_drive] = min(current_throttle + 0.5, 1.0)
+            elif current_throttle < -0.01:
+                data.ctrl[id_drive] = max(current_throttle - 0.5, -1.0)
 
     # 3. Active Leveling (Always on)
     chassis_pitch = get_body_pitch(model, data, "car")
-    data.ctrl[id_level] = -chassis_pitch 
+    data.ctrl[id_level] = -chassis_pitch
 
 def run_simulation(scene: int):
     print(f"\n🚀 Loading Simulation from: {XML_PATH}")
@@ -475,18 +497,18 @@ def run_simulation(scene: int):
                 
                 viewer.sync()
                 last_render_time = data.time
-                if int(data.time * 100) % 30 == 0:
-                        d1 = get_sensor_value(model, data, "floor_sensU")
-                        d2 = get_sensor_value(model, data, "floor_sensL")
-                        d3 = get_sensor_value(model, data, "wall_sens")
-                        print(f"L1(Low): {d1:.3f} | L2(Mid): {d2:.3f} | L3(High): {d3:.3f}")
+                # if int(data.time * 100) % 30 == 0:
+                #         d1 = get_sensor_value(model, data, "floor_sensU")
+                #         d2 = get_sensor_value(model, data, "floor_sensL")
+                #         d3 = get_sensor_value(model, data, "wall_sens")
+                #         print(f"L1(Low): {d1:.3f} | L2(Mid): {d2:.3f} | L3(High): {d3:.3f}")
 
-                        if d3 > 0 and d3 < 0.75:
-                            print("Wall detected")
-                        if d1 - d2 < 0.1:
-                            print("No floor detected! (step)")
-                        else:
-                            print("floor detected! (step)")
+                #         if d3 > 0 and d3 < 0.75:
+                #             print("Wall detected")
+                #         if d1 - d2 < 0.1:
+                #             print("No floor detected! (step)")
+                #         else:
+                #             print("floor detected! (step)")
             # 3. Time keeping
             time_until_next_step = model.opt.timestep - (time.time() - step_start)
             if time_until_next_step > 0:
