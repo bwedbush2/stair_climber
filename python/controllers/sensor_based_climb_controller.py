@@ -2,11 +2,10 @@ import numpy as np
 import mujoco
 
 # --- STATE STORAGE ---
-# We attach a storage dictionary to the function itself.
-# This allows us to remember the "previous" value without needing a class.
 if not hasattr(mujoco, "climb_filter_state"):
     mujoco.climb_filter_state = {
         "filtered_target": 0.0,
+        "last_valid_raw": 0.0, # Remembers the last good sensor reading
         "first_run": True
     }
 
@@ -18,17 +17,17 @@ def get_sensor_value(model, data, sensor_name):
 
 def climb_control(model, data):
     """
-    Adjusts the rocker-bogie angle with signal smoothing to prevent jitter.
+    Adjusts the rocker-bogie angle with Decay Logic and Slew Rate Limiting 
+    to completely eliminate sensor jitter and microbouncing.
     """
     # --- 1. CONFIGURATION ---
-    kp = 3.5       # Slightly reduced stiffness
-    kd = 0.15      # Increased damping
+    kp = 5 
+    kd = 0.2
     
-    # Smoothing Factor (0.0 to 1.0)
-    # 0.05 = Very smooth, slow reaction
-    # 0.50 = Less smooth, fast reaction
-    # 1.00 = No smoothing (jittery)
-    ALPHA = 0.1 
+    # FILTER SETTINGS
+    ALPHA = 0.05            # Low-pass smoothing factor
+    DECAY_RATE = 0.90       # How fast to return to 0 if sensors miss (0.98 = slow decay)
+    MAX_SLEW_RATE = 0.005   # Max radians the joint target can change per simulation step
 
     s_low_name = "floor_sensL"
     s_high_name = "floor_sensU"
@@ -41,36 +40,51 @@ def climb_control(model, data):
     d_low = get_sensor_value(model, data, s_low_name)
     d_high = get_sensor_value(model, data, s_high_name)
     
-    # --- 3. CALCULATE RAW TARGET ---
+    state = mujoco.climb_filter_state
+
+    # --- 3. CALCULATE RAW TARGET (With Dropout Protection) ---
     raw_target = 0.0
 
     if d_low > 0 and d_high > 0:
+        # Valid Reading: Calculate angle normally
         delta_d = d_high - d_low
-        
-        # Geometric calculation
         rise = SENSOR_Z_DIFF - (delta_d * SIN_45)
         run = delta_d * COS_45
-        
-        # Use arctan2 for continuous angle calculation (handles vertical walls naturally)
         angle = np.arctan2(rise, run)
         
-        # Invert and clamp (Positive Slope = Negative Joint Angle)
+        # Invert for correct joint direction
         raw_target = -np.clip(angle, -1.0, 1.0)
+        
+        # Save this as a "known good" value
+        state["last_valid_raw"] = raw_target
+    else:
+        # Invalid Reading (Sensor miss/infinity):
+        # Instead of snapping to 0.0 (which causes violent shaking),
+        # we slowly DECAY the last known good value towards 0.
+        state["last_valid_raw"] *= DECAY_RATE
+        raw_target = state["last_valid_raw"]
 
-    # --- 4. APPLY SMOOTHING (Low-Pass Filter) ---
-    # Retrieve previous smoothed value
-    state = mujoco.climb_filter_state
-    
+    # --- 4. LOW-PASS FILTER ---
     if state["first_run"]:
         state["filtered_target"] = raw_target
         state["first_run"] = False
     else:
-        # Filter Equation: Output = (α * New) + ((1 - α) * Old)
-        state["filtered_target"] = (ALPHA * raw_target) + ((1 - ALPHA) * state["filtered_target"])
+        # Apply standard smoothing
+        new_smoothed = (ALPHA * raw_target) + ((1 - ALPHA) * state["filtered_target"])
+        
+        # --- 5. SLEW RATE LIMITER (The Anti-Vibration Fix) ---
+        # Calculate how much the target WANTS to change
+        delta = new_smoothed - state["filtered_target"]
+        
+        # Clamp that change to the maximum allowed speed
+        clamped_delta = np.clip(delta, -MAX_SLEW_RATE, MAX_SLEW_RATE)
+        
+        # Apply the clamped change
+        state["filtered_target"] += clamped_delta
         
     final_target = state["filtered_target"]
 
-    # --- 5. COMPUTE PD CONTROL ---
+    # --- 6. COMPUTE PD CONTROL ---
     joint_name = "climb_L"
     joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
     if joint_id == -1: return 0.0
