@@ -50,7 +50,7 @@ XML_PATH = os.path.join(xml_folder, "ray_simulation.xml")
 XML_PATH = os.path.normpath(XML_PATH)
 
 # Path to your trained model
-MODEL_PATH = "ray_stairs_policy" # Assumes the .zip file is in the same folder
+MODEL_PATH = os.path.join(script_dir, "Trained Climbing Models", "Version 1 (Stable)") # Assumes the .zip file is in the same folder
 
 # ==========================================
 # 🤖 ROBOT DEFINITION & SCENARIOS

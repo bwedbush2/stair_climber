@@ -118,7 +118,7 @@ class RayProceduralEnv(gym.Env):
         <mujoco model="RAY_Procedural">
           <compiler autolimits="true"/>
           <asset>
-            <mesh name="chassis" file="{self.script_dir}/../mujoco/assets/chassis.stl" scale="0.001 0.001 0.001"/>
+            <mesh name="chassis" file="{self.script_dir}/../../mujoco/assets/chassis.stl" scale="0.001 0.001 0.001"/>
             <texture name="concrete" type="2d" builtin="flat" rgb1=".7 .7 .7" width="512" height="512"/>
             <material name="concrete" texture="concrete" reflectance=".1"/>
             <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .2 .3" rgb2=".2 .3 .4"/>
