@@ -382,54 +382,51 @@ def get_rl_observation(model, data):
 
     # 4. Velocity
     vel = np.linalg.norm(data.qvel[:2])
+
+    id_drive = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_forward")
+    drive = data.ctrl[id_drive]
     
-    return np.array([pitch, roll, bogie, l1, l2, l3, vel], dtype=np.float32)
+    return np.array([pitch, roll, bogie, l1, l2, l3, vel, drive], dtype=np.float32)
 
 # Global memory for RL smoothing
 rl_filtered_action = 0.0
 
 def controller(model, data, scene, rl_agent=None):
-    """
-    Main Controller.
-    - Drive/Turn: From Trajectory Planner
-    - Climb: From RL Agent (if enabled) OR Standard Controller
-    - Bin: Automatic Reflex
-    """
     global rl_filtered_action
-    
+
+    # IDs
     id_drive = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_forward")
     id_turn = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_turn")
     id_climb = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "actuator_climb")
     id_level = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "level_bin")
 
-    # 1. Drive & Turn (Always Trajectory Planner)
+    # 1. DEFAULT: Trajectory Planner
+    drive_cmd, turn_cmd = 0.0, 0.0
     if USE_TRAJECTORY_CONTROL:
-        drive, turn = current_traj_control(model, data, scene)
-        data.ctrl[id_drive] = drive
-        data.ctrl[id_turn] = turn
+        drive_cmd, turn_cmd = current_traj_control(model, data, scene)
+        data.ctrl[id_drive] = drive_cmd
+        data.ctrl[id_turn] = turn_cmd  # Either Trajectory OR RL
 
-    # 2. Climb Control (RL vs Logic)
-    if USE_CLIMB_CONTROL:
-        if USE_RL_FOR_CLIMB and rl_agent is not None:
-            # --- RL MODE ---
-            # 1. Get Obs
-            obs = get_rl_observation(model, data)
-            # 2. Predict (Deterministic)
-            action, _ = rl_agent.predict(obs, deterministic=True)
-            raw_action = action[0]
-            # 3. Smooth
-            alpha = 0.2
-            rl_filtered_action = (alpha * raw_action) + ((1 - alpha) * rl_filtered_action)
-            # 4. Apply
-            data.ctrl[id_climb] = rl_filtered_action
-        else:
-            # --- STANDARD LOGIC MODE ---
-            climb_val = current_climb_control(model, data)
-            data.ctrl[id_climb] = climb_val
+    # 2. RL CLIMB & TERMINAL GUIDANCE
+    climb_cmd = 0.0
 
-    # 3. Active Leveling (Always on)
-    chassis_pitch = get_body_pitch(model, data, "car")
-    data.ctrl[id_level] = -chassis_pitch 
+    if USE_CLIMB_CONTROL and rl_agent is not None:
+        # Get Obs
+        obs = get_rl_observation(model, data)
+        wall_dist = obs[5]  # Index 5 is 'wall_sens'
+
+        # Predict [Climb, Turn]
+        action, _ = rl_agent.predict(obs, deterministic=True)
+
+        # Smoothing (Vectorized for both)
+        # Note: rl_filtered_action should now be initialized as np.array([0.0, 0.0])
+        alpha = 0.2
+        rl_filtered_action = (alpha * action) + ((1 - alpha) * rl_filtered_action)
+        climb_cmd = rl_filtered_action[0]
+        data.ctrl[id_climb] = climb_cmd
+
+    # 4. LEVELING
+    data.ctrl[id_level] = -get_body_pitch(model, data, "car")
 
 def run_simulation(scene: int, rl_agent=None):
     print(f"\n🚀 Loading Simulation from: {XML_PATH}")

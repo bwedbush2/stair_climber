@@ -1,5 +1,5 @@
 from stable_baselines3 import PPO
-from ray_stairs_env import RayFocusedStairs
+from ray_stairs_env import RayProceduralEnv
 import os
 
 def main():
@@ -8,7 +8,7 @@ def main():
     # Make sure you run build_ray.py manually or we can call it here if organized
     # For now, assuming you ran: python build_ray.py -> 3
     
-    env = RayFocusedStairs() # CPU Mode
+    env = RayProceduralEnv() # CPU Mode
     
     # 2. MODEL (Tuned Hyperparameters)
     model = PPO(
@@ -17,7 +17,7 @@ def main():
         verbose=1, 
         device="cpu", # Force CPU for stability
         learning_rate=3e-4,
-        ent_coef=0.01,    # Encourage exploration (prevents static leg holding)
+        ent_coef=0.05,    # Encourage exploration (prevents static leg holding)
         batch_size=2048,  # Smoother updates
         n_steps=2048,
         gamma=0.99
@@ -35,7 +35,7 @@ def main():
 
     # 3. TEST
     print("🎬 Running Test...")
-    env = RayFocusedStairs(render_mode="human")
+    env = RayProceduralEnv(render_mode="human")
     obs, _ = env.reset()
     
     while True:
