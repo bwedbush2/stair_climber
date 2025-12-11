@@ -1,7 +1,7 @@
 import numpy as np
 
 # Control gains and parameters
-_K_V = 0.5            # gain on forward error
+_K_V = 1.0            # gain on forward error
 _K_W = 5.0            # gain on heading error
 
 def traj_pid(dx, dy, yaw) -> tuple[float, float]: 
@@ -36,7 +36,8 @@ def traj_pid(dx, dy, yaw) -> tuple[float, float]:
     # print(f"heading error = {heading_error}")
 
     # Simple proportional controller for unicycle-like behavior
-    v_cmd = _K_V * ex_body          # forward velocity command
-    w_cmd = _K_W * heading_error    # turn rate command
-
+    v_cmd = max(0, _K_V * ex_body - _K_W * abs(heading_error))       # forward velocity command
+    w_cmd = _K_W * heading_error                                # turn rate command
+    # print(f"drive error = {ex_body}")
+    # print(f"headi error = {heading_error}")
     return (v_cmd, w_cmd)
