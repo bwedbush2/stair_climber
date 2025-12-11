@@ -13,10 +13,9 @@ import sys
 try:
     from traj_planning.traj_control import traj_control as current_traj_control
     from traj_planning.create_path import create_path
-except ImportError:
-    print("⚠️ Warning: Could not import trajectory controller file. Using dummy.")
-    current_traj_control = lambda m, d, s: (0.0, 0.0)
-    create_path = lambda m, d, s: []
+except ImportError as e:
+    print("⚠️ Warning: Could not import trajectory controller file")
+    print("ImportError details:", e)
 
 # 2. Climb Control Import (Standard)
 try:

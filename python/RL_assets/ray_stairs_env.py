@@ -81,7 +81,7 @@ class RayProceduralEnv(gym.Env):
         # Track height to scale reward later
         self.current_step_height = np.random.uniform(0.08, 0.22)
         step_depth = np.random.uniform(0.25, 0.50)
-        num_steps = np.random.randint(3, 12)
+        num_steps = np.random.randint(3, 20)
 
         self.mode = "CLIMB" if np.random.random() < 0.7 else "DESCEND"
 
@@ -173,24 +173,41 @@ class RayProceduralEnv(gym.Env):
         self.turn_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_turn")
         self.climb_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "actuator_climb")
         self.bin_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "level_bin")
-
+    
+    
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self._generate_and_load_xml()
-
-        self.target_speed = np.random.uniform(0.0, 1.0)
-        self.data.qpos[3:7] = [1, 0, 0, 0]  # Face Forward
+        
+        self.target_speed = np.random.uniform(0.2, 0.7)
+        
+        # 1. Orientation
+        self.data.qpos[3:7] = [1, 0, 0, 0] 
         self.data.qpos[1] = np.random.uniform(-0.1, 0.1)
 
+        # 2. SPAWN HEIGHT FIX
+        # Was 0.2. Increase to 0.3 to drop it safely onto the floor.
+        # This prevents "floor clipping explosions"
+        if self.mode == "CLIMB":
+             # Force Z to be safe
+             self.data.qpos[2] = 0.5
+        
         self.filtered_action = 0.0
         self.last_raw_action = 0.0
-
+        
+        # Close old viewer
         if self.viewer is not None:
             self.viewer.close()
             self.viewer = None
-
+            
         mujoco.mj_step(self.model, self.data)
+        
+        # 3. FORCE RENDER (Open the window NOW)
+        if self.render_mode == "human":
+            self._render_frame()
+            
         return self._get_obs(), {}
+
 
     def step(self, action):
         raw_action = action[0]  # Single action (Climb)
@@ -212,14 +229,15 @@ class RayProceduralEnv(gym.Env):
         speed_error = np.clip(abs(vel_x - self.target_speed), 0, 1.0)
 
         # 1. Progress (High Priority)
-        reward_progress = (self.target_speed - speed_error) * 15.0
+        reward_progress = (self.target_speed - speed_error) * 25.0
+        reward_progress += self.data.qpos[0] * 12.0
 
         # 2. Stability
         reward_stability = -abs(self._get_pitch()) * 2.0
 
         # 3. Energy (Hinge)
-        reward_energy_base = -np.square(raw_action) * 0.1
-        excess = max(0, abs(raw_action) - 1.0)
+        reward_energy_base = -np.square(raw_action) * 0.15
+        excess = max(0, abs(raw_action) - 1.2)
         reward_energy_excess = -np.square(excess) * 10.0
 
         # 4. Contextual Safety
@@ -307,9 +325,25 @@ class RayProceduralEnv(gym.Env):
             return 0.0
 
     def _render_frame(self):
+        # 1. Launch Viewer if it doesn't exist
         if self.viewer is None:
             import mujoco.viewer
             self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
+            
+            # --- CAMERA SETUP (Auto-Align) ---
+            # 2. Set Camera to TRACKING Mode
+            self.viewer.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
+            
+            # 3. Tell it which body to track (The "car" chassis)
+            car_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "car")
+            self.viewer.cam.trackbodyid = car_id
+            
+            # 4. Set Angle & Zoom
+            self.viewer.cam.distance = 4.0  # Zoom level
+            self.viewer.cam.elevation = -20 # Look down slightly
+            self.viewer.cam.azimuth = 90    # Look from the side/behind
+
+        # 5. Update the window
         self.viewer.sync()
 
     def close(self):
