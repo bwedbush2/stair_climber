@@ -54,8 +54,8 @@ def create_path(model, data, scene: int) -> list[tuple[float, float]]:
         ],
         3: [
             (x0, y0, 2),       # start pos
-            (1.5, 0, 2),       # top of stairs
-            (3.5, 0, 2),       # goal (downstairs and clearance)
+            (4.0, 0, 2),       # top of stairs
+            (8.5, 0, 2),       # goal (downstairs and clearance)
         ],
         4: [
             (x0, y0, 2),       # start pos

@@ -1,7 +1,7 @@
 import numpy as np
 import mujoco
 from .traj_controllers.traj_pid import traj_pid as pid_control
-# from .traj_controllers.traj_mpc import traj_mpc as mpc_control
+from .traj_controllers.traj_mpc import traj_mpc as mpc_control
 
 from .create_path import create_path
 
@@ -10,8 +10,8 @@ USERDATA_INIT_FLAG = 0   # 0.0 = not initialized, 1.0 = initialized
 USERDATA_WP_INDEX  = 1   # current waypoint index (stored as float, cast to int)
 
 # Parameters
-_WAYPOINT_TOL = 0.10  # [m] distance at which a waypoint is reached
-_MAX_DRV = 0.5       # clip commands to [-1, 1]
+_WAYPOINT_TOL = 0.40  # [m] distance at which a waypoint is reached
+_MAX_DRV = 0.5       # clip commands
 _MAX_TRN = 1.0
 
 # Internal (Python-side) cache for the path only
@@ -40,9 +40,35 @@ def _get_car_pose(model, data, body_name="car"):
 
     return x, y, yaw
 
+def _interpolate_path(path) :
+    '''
+    Interpolates a given path with n extra points between each waypoint
+    
+    :param path: list of tuples of (x,y) points
+    :param n: number of evenly spaced points to add between each waypoint
+    '''
+    waypoints = np.array(path)
+    if waypoints.shape[0] < 2:
+        raise ValueError("Need at least two waypoints to interpolate a path.")
+    
+    segments = []
+    for (x0, y0, z0), (x1, y1, z1) in zip(waypoints[:-1], waypoints[1:]):
+        #n = round(np.sqrt((x1-x0)**2 + (y1-y0)**2) / 2) + 2            # interpolate based on distance b/t points
+        n = 2                                                           # for now just return same points
+        xs = np.linspace(x0, x1, n)
+        ys = np.linspace(y0, y1, n)
+        zs = np.linspace(z0, z1, n)
+        seg = np.column_stack((xs, ys, zs))
+        segments.append(seg)
+    
+    # Stack all segments into one array and delete repeated points
+    path_interp = np.vstack([seg[:-1] for seg in segments] + [segments[-1][-1:]])
+    
+    return path_interp
+
 
 # Helper: initialize userdata and path cache
-def _init_if_needed(model, data, scene):
+def _init_if_needed(model, data, scene) :
     """
     Initialize path and userdata slots on first call.
     Uses:
@@ -72,7 +98,8 @@ def _init_if_needed(model, data, scene):
                 f"got shape {path.shape}"
             )
 
-        _PATH_CACHE = path
+        path_interp = _interpolate_path(path)
+        _PATH_CACHE = path_interp
 
         # Initialize userdata state
         data.userdata[USERDATA_INIT_FLAG] = 1.0  # mark as initialized
@@ -142,6 +169,7 @@ def traj_control(model, data, scene, time=None):
         dist = np.hypot(dx, dy)
 
     v_cmd, w_cmd = pid_control(dx, dy, yaw)
+    # v_cmd, w_cmd = mpc_control(model, data)
 
     # Map to actuators and clip
     forward_ctrl = np.clip(v_cmd, -_MAX_DRV, _MAX_DRV)
