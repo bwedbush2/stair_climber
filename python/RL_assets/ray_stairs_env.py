@@ -60,19 +60,24 @@ class RayProceduralEnv(gym.Env):
         self.viewer = None
         self.script_dir = os.path.dirname(os.path.abspath(__file__))
 
-        # 1. ACTION SPACE: Climb Only [1D]
+        # Action: [Climb]
         self.action_space = spaces.Box(low=np.array([-1.5], dtype=np.float32),
                                        high=np.array([1.5], dtype=np.float32), dtype=np.float32)
 
-        # 2. OBS SPACE: 8 values
+        # Observation: 8 values
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(8,), dtype=np.float32)
 
         self.model = None
         self.data = None
         self.target_speed = 0.4
-        self.current_step_height = 0.1  # Tracked for reward scaling
+        self.current_step_height = 0.1
         self.filtered_action = 0.0
         self.last_raw_action = 0.0
+
+        # TIMERS
+        self.step_counter = 0
+        self.max_steps = 2000  # ~60 seconds at 30Hz
+        self.stall_counter = 0
 
         self._generate_and_load_xml()
 
@@ -80,16 +85,15 @@ class RayProceduralEnv(gym.Env):
         # 1. RANDOMIZE PARAMETERS
         self.current_step_height = np.random.uniform(0.08, 0.22)
         step_depth = np.random.uniform(0.25, 0.50)
-        num_steps = np.random.randint(3, 12) # Reduced max from 20 to 12 to keep map size reasonable
+        num_steps = np.random.randint(3, 12)
 
-        self.mode = "CLIMB" if np.random.random() < 0.7 else "DESCEND"
+        self.mode = "CLIMB" if np.random.random() < 0.95 else "DESCEND"
 
-        # --- BUILD GEOMETRY ---
         stair_xml = ""
         current_x = 2.0
         current_z = 0.0
 
-        # A. BUILD UP STAIRS
+        # Build UP
         for i in range(num_steps):
             z_center = current_z + (self.current_step_height / 2)
             stair_xml += f"""
@@ -99,47 +103,34 @@ class RayProceduralEnv(gym.Env):
             current_x += step_depth
             current_z += self.current_step_height
 
-        # B. BUILD PLATFORM
+        # Build PLATFORM
         plat_len = 1.5
-        # Platform center is at the same Z height as the last step's center
         plat_z_center = current_z - (self.current_step_height / 2)
-        
         stair_xml += f"""
         <geom name="platform" type="box" size="{plat_len / 2} 1 {self.current_step_height / 2}" 
               pos="{current_x + plat_len / 2} 0 {plat_z_center}" material="concrete"/>
         """
         current_x += plat_len
-        
-        # C. BUILD DOWN STAIRS (The missing piece!)
-        # We start from current_z (top surface) and step down
+
+        # Build DOWN
         for i in range(num_steps):
-            current_z -= self.current_step_height # Drop surface level
-            z_center = current_z + (self.current_step_height / 2) # Center of the block
-            
+            current_z -= self.current_step_height
+            z_center = current_z + (self.current_step_height / 2)
             stair_xml += f"""
             <geom name="step_d_{i}" type="box" size="{step_depth / 2} 1 {self.current_step_height / 2}" 
                   pos="{current_x + step_depth / 2} 0 {z_center}" material="concrete"/>
             """
             current_x += step_depth
 
-        # --- SPAWN LOGIC ---
+        # Spawn
         if self.mode == "CLIMB":
             start_x = 0.5
             start_z = 0.2
         else:
-            # DESCEND MODE: Spawn in the middle of the platform
-            # We subtract half the platform length to get to its center (current_x is at the end edge of plat + steps)
-            # Actually, current_x is now way past the platform (at the bottom of down stairs).
-            # We need to calculate platform center explicitly.
-            
-            # Recalculate platform center X:
-            # Start of stairs (2.0) + (Up Steps * Depth) + (Plat Len / 2)
-            plat_center_x = 2.0 + (num_steps * step_depth) + (plat_len / 2)
-            
-            start_x = plat_center_x
-            start_z = (num_steps * self.current_step_height) + 0.3 # Safe drop height above platform
+            plat_center = 2.0 + (num_steps * step_depth) + (plat_len / 2)
+            start_x = plat_center
+            start_z = (num_steps * self.current_step_height) + 0.5
 
-        # --- FULL XML ---
         full_xml = f"""
         <mujoco model="RAY_Procedural">
           <compiler autolimits="true"/>
@@ -179,7 +170,7 @@ class RayProceduralEnv(gym.Env):
               <joint joint="climb_L" coef="1"/> <joint joint="climb_R" coef="1"/>
             </fixed>
           </tendon>
-          
+
           <equality>
               <joint joint1="climb_L" joint2="climb_R" polycoef="0 1 0 0 0" solimp="0.99 0.99 0.01" solref="0.005 1"/>
           </equality>
@@ -204,49 +195,44 @@ class RayProceduralEnv(gym.Env):
         self.turn_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_turn")
         self.climb_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "actuator_climb")
         self.bin_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "level_bin")
-        
-    
+
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self._generate_and_load_xml()
-        
-        self.target_speed = np.random.uniform(0.2, 0.7)
-        
-        # 1. Orientation
-        self.data.qpos[3:7] = [1, 0, 0, 0] 
+
+        self.target_speed = np.random.uniform(0.2, 0.5)
+        self.data.qpos[3:7] = [1, 0, 0, 0]
         self.data.qpos[1] = np.random.uniform(-0.1, 0.1)
 
-        # 2. SPAWN HEIGHT FIX
-        # Was 0.2. Increase to 0.3 to drop it safely onto the floor.
-        # This prevents "floor clipping explosions"
         if self.mode == "CLIMB":
-             # Force Z to be safe
-             self.data.qpos[2] = 0.5
-        
+            self.data.qpos[2] = 0.5
+            self.target_speed = np.random.uniform(0.3, 0.7)
+
         self.filtered_action = 0.0
         self.last_raw_action = 0.0
-        
-        # Close old viewer
+
+        # RESET TIMERS
+        self.stall_counter = 0
+        self.step_counter = 0
+
         if self.viewer is not None:
             self.viewer.close()
             self.viewer = None
-            
+
         mujoco.mj_step(self.model, self.data)
-        
-        # 3. FORCE RENDER (Open the window NOW)
+
         if self.render_mode == "human":
             self._render_frame()
-            
+
         return self._get_obs(), {}
 
-
     def step(self, action):
-        raw_action = action[0]  # Single action (Climb)
+        raw_action = action[0]
+        self.step_counter += 1
 
         alpha = 0.2
         self.filtered_action = (alpha * raw_action) + ((1 - alpha) * self.filtered_action)
 
-        # Controls (Turn is locked)
         self.data.ctrl[self.drive_id] = self.target_speed
         self.data.ctrl[self.climb_id] = self.filtered_action
         self.data.ctrl[self.turn_id] = 0.0
@@ -255,69 +241,91 @@ class RayProceduralEnv(gym.Env):
         for _ in range(20):
             mujoco.mj_step(self.model, self.data)
 
-        # --- REWARDS ---# ... inside step() ...
-
         # --- REWARD LOGIC ---
         vel_x = self.data.qvel[0]
-        
-        # 1. PROGRESS (Velocity Only)
-        # We want it to move forward. 
-        # Using 'vel_x' directly is robust. 
-        # If it goes backwards, this becomes negative (Good!).
+
+        # 1. PROGRESS (Velocity)
+        # Using raw velocity is robust.
         reward_progress = vel_x * 50.0
-        
-        # 2. STABILITY
+
+        # 2. STABILITY (General)
         reward_stability = -abs(self._get_pitch()) * 2.0
+
+        # 3. ENERGY (Base Cost)
+        # Always active. discourage extreme values slightly.
+        reward_energy_base = -np.square(raw_action) * 3
+
+        # 4. CONTEXTUAL SAFETY (The Anti-Wheelie Fix)
+        wall_dist = self._read_sensor("wall_sens")  # Forward High
+        floor_dist = self._read_sensor("floor_sensU")  # Forward Angled Down
+
+        # A. GEOMETRIC FLAT DETECTION
+        # Wall is Far (> 1.5m)
+        wall_is_far = np.clip((wall_dist - 1.5) * 2.0, 0.0, 1.0)
+
+        # Floor is Consistent (> 0.25m)
+        # On flat ground, hypotenuse is ~0.28m. On stairs, it hits face < 0.15m.
+        # Even if doing a wheelie, this sensor sees the floor further ahead, so it stays HIGH.
+        floor_is_flat = np.clip((floor_dist - 0.20) * 5.0, 0.0, 1.0)
+
+        # Combined Safety: We are "Safe" if Wall is Far AND Floor is Flat.
+        # Notice: We do NOT check robot pitch here. The robot cannot fake this.
+        safety_factor = wall_is_far * floor_is_flat
+
+        # B. PENALTIES (Applied only when Safe/Flat)
+
+        # Penalty 1: "Put your legs down"
+        # If safe, action should be 0.0. Punish deviation heavily.
+        reward_lazy_context = -np.square(raw_action) * 2.0 * safety_factor
+
+        # Penalty 2: "Put your nose down" (Anti-Wheelie)
+        # If safe, pitch should be 0.0. Punish tilting heavily.
+        reward_flat_pitch = -(self._get_pitch()) * 10.0 * safety_factor
+
+        total_context = reward_lazy_context + reward_flat_pitch
         
-        # 3. ENERGY (Hinge)
-        reward_energy_base = -np.square(raw_action) * 0.15
-        excess = max(0, abs(raw_action) - 1.2)
-        reward_energy_excess = -np.square(excess) * 10.0
-        
-        # 4. CONTEXTUAL SAFETY
-        wall_dist = self._read_sensor("wall_sens")
-        pitch = self._get_pitch()
-                
-        # LOGIC:
-        # 1. Wall Check: Is the wall far away? (> 1.2m)
-        wall_is_clear = np.clip((wall_dist - 1.2) * 2.0, 0.0, 1.0)
-
-        robot_is_flat = 1.0 - np.clip(abs(pitch) * 5.0, 0.0, 1.0)
-
-        safety_factor = wall_is_clear * robot_is_flat
-        reward_context = (reward_energy_base + reward_energy_excess) * 5.0 * safety_factor
-        total_energy = reward_energy_base + reward_energy_excess + reward_context
-
+        # 5. OTHER
         reward_smooth = -np.square(raw_action - self.last_raw_action) * 2.0
-        reward_heading = -abs(self._get_yaw()) * 2.0 
-        
-        # 5. TIME PENALTY (The "Hurry Up" Fix)
-        # Flat penalty every step. Forces it to finish ASAP.
-        reward_time = -1.0 
+        reward_heading = -abs(self._get_yaw()) * 2.0
+        reward_time = -1.0
 
-        total_reward = (reward_progress + reward_stability + total_energy + 
+        total_reward = (reward_progress + reward_stability +
+                        reward_energy_base + total_context +
                         reward_smooth + reward_heading + reward_time)
 
         self.last_raw_action = raw_action
 
-        # TERMINATION
+        # --- TERMINATION ---
         terminated = False
-        if abs(self._get_pitch()) > 1.0 or abs(self._get_roll()) > 1.0: terminated = True; total_reward -= 50.0
 
-        # Success (X > 12.0)
+        # 1. Fall/Flip
+        if abs(self._get_pitch()) > 1.0 or abs(self._get_roll()) > 1.0: terminated = True; total_reward -= 5000.0
+        if self.data.qpos[2] < 0.0: terminated = True; total_reward -= 1000.0  # Fall off world
+
+        # 2. Success
         if self.data.qpos[0] > 12.0:
             terminated = True
-
-            # --- DIFFICULTY BONUS ---
-            # Base Reward: 1000
-            # Height Bonus: Scale by step height (0.08 to 0.22)
-            # A 22cm step gives roughly DOUBLE the reward of an 8cm step.
             difficulty_mult = 1.0 + (self.current_step_height * 10.0)
-            total_reward += 1000.0 * difficulty_mult
+            total_reward += 1500.0 * difficulty_mult
+
+        # 3. Stall Check
+        if vel_x < 0.05:
+            self.stall_counter += 1
+        else:
+            self.stall_counter = 0
+
+        if self.stall_counter > 60:
+            terminated = True
+            total_reward -= 1000.0
+
+            # 4. Hard Time Limit
+        if self.step_counter >= self.max_steps:
+            terminated = True
+            # No extra penalty needed (already lost 2000 points from reward_time)
 
         return self._get_obs(), total_reward, terminated, False, {}
 
-    # --- HELPERS ---
+    # ... (Helpers unchanged) ...
     def _get_obs(self):
         pitch = self._get_pitch()
         roll = self._get_roll()
@@ -350,22 +358,14 @@ class RayProceduralEnv(gym.Env):
             return 0.0
 
     def _render_frame(self):
-        # 1. Launch Viewer if it doesn't exist
         if self.viewer is None:
             import mujoco.viewer
             self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
-            
-            # --- CAMERA AUTO-ALIGN ---
-            # This locks the camera to the robot ('car')
             self.viewer.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
             self.viewer.cam.trackbodyid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "car")
-            
-            # Set a nice view angle (Behind and above)
             self.viewer.cam.distance = 4.0
             self.viewer.cam.elevation = -25
             self.viewer.cam.azimuth = 90
-
-        # 2. Update the window
         self.viewer.sync()
 
     def close(self):

@@ -15,10 +15,12 @@ def main():
     )
     
     # Load existing model if it exists, otherwise create new
-    if os.path.exists("ray_stairs_policy.zip"):
-        print("🔄 Loading existing model to continue training...")
-        model = PPO.load("ray_stairs_policy", env=env, device="cpu", 
-                         ent_coef=0.05, learning_rate=3e-4)
+    # if os.path.exists("ray_stairs_policy.zip"):
+    #     print("🔄 Loading existing model to continue training...")
+    #     model = PPO.load("ray_stairs_policy", env=env, device="cpu",
+    #                      ent_coef=0.05, learning_rate=3e-4)
+    if False:
+        print("??")
     else:
         print("🆕 Creating new model...")
         model = PPO(
@@ -26,17 +28,17 @@ def main():
             env, 
             verbose=1, 
             device="cpu",
-            learning_rate=3e-4,
-            ent_coef=0.05, 
+            learning_rate=2e-4,
+            ent_coef=0.03,
             batch_size=2048,
             n_steps=2048,
-            gamma=0.99
+            gamma=0.999
         )
 
     print("🏋️‍♂️ Training Started (Press Ctrl+C to Stop & Save)...")
     try:
         # 5 Million steps is a good overnight target
-        model.learn(total_timesteps=5_000_000, callback=checkpoint_callback)
+        model.learn(total_timesteps=50_000_000, callback=checkpoint_callback)
         model.save("ray_stairs_policy")
         print("✅ DONE! Saved 'ray_stairs_policy.zip'")
     except KeyboardInterrupt:
