@@ -178,14 +178,14 @@ def get_scenario_4():
             if step == 9:
                 z_pos -= 0.05
                 # UPDATE: Make the last step thinner (0.1 * 0.75 = 0.075)
-                step_size = "1 .2 .075"
+                step_size = "1 .2 .1"
 
             houses_xml += f'<geom name="s{i}_{step}" type="box" size="{step_size}" pos="{x_pos} {y_pos:.2f} {z_pos:.2f}" material="concrete"/>\n'
 
         # C. Porch
         houses_xml += f"""
-        <body name="porch_{i}" pos="{x_pos} -12 1.1">
-            <geom type="box" size="2 1.2 0.1" material="wood"/>
+        <body name="porch_{i}" pos="{x_pos} -12.5 1.1">
+            <geom type="box" size="2 1.2 0.05" material="wood"/>
             <geom type="box" size="1 .1 1.5" pos="0 -1.2 1.5" rgba=".4 .2 .1 1"/>
         </body>
         """

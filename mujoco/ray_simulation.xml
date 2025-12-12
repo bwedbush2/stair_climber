@@ -57,10 +57,10 @@
 <geom name="s0_6" type="box" size="1 .2 .1" pos="4 -10.10 0.70" material="concrete"/>
 <geom name="s0_7" type="box" size="1 .2 .1" pos="4 -10.50 0.80" material="concrete"/>
 <geom name="s0_8" type="box" size="1 .2 .1" pos="4 -10.90 0.90" material="concrete"/>
-<geom name="s0_9" type="box" size="1 .2 .075" pos="4 -11.30 0.95" material="concrete"/>
+<geom name="s0_9" type="box" size="1 .2 .1" pos="4 -11.30 0.95" material="concrete"/>
 
-        <body name="porch_0" pos="4 -12 1.1">
-            <geom type="box" size="2 1.2 0.1" material="wood"/>
+        <body name="porch_0" pos="4 -12.5 1.1">
+            <geom type="box" size="2 1.2 0.05" material="wood"/>
             <geom type="box" size="1 .1 1.5" pos="0 -1.2 1.5" rgba=".4 .2 .1 1"/>
         </body>
         
@@ -76,10 +76,10 @@
 <geom name="s1_6" type="box" size="1 .2 .1" pos="-2 -10.10 0.70" material="concrete"/>
 <geom name="s1_7" type="box" size="1 .2 .1" pos="-2 -10.50 0.80" material="concrete"/>
 <geom name="s1_8" type="box" size="1 .2 .1" pos="-2 -10.90 0.90" material="concrete"/>
-<geom name="s1_9" type="box" size="1 .2 .075" pos="-2 -11.30 0.95" material="concrete"/>
+<geom name="s1_9" type="box" size="1 .2 .1" pos="-2 -11.30 0.95" material="concrete"/>
 
-        <body name="porch_1" pos="-2 -12 1.1">
-            <geom type="box" size="2 1.2 0.1" material="wood"/>
+        <body name="porch_1" pos="-2 -12.5 1.1">
+            <geom type="box" size="2 1.2 0.05" material="wood"/>
             <geom type="box" size="1 .1 1.5" pos="0 -1.2 1.5" rgba=".4 .2 .1 1"/>
         </body>
         
@@ -95,10 +95,10 @@
 <geom name="s2_6" type="box" size="1 .2 .1" pos="-8 -10.10 0.70" material="concrete"/>
 <geom name="s2_7" type="box" size="1 .2 .1" pos="-8 -10.50 0.80" material="concrete"/>
 <geom name="s2_8" type="box" size="1 .2 .1" pos="-8 -10.90 0.90" material="concrete"/>
-<geom name="s2_9" type="box" size="1 .2 .075" pos="-8 -11.30 0.95" material="concrete"/>
+<geom name="s2_9" type="box" size="1 .2 .1" pos="-8 -11.30 0.95" material="concrete"/>
 
-        <body name="porch_2" pos="-8 -12 1.1">
-            <geom type="box" size="2 1.2 0.1" material="wood"/>
+        <body name="porch_2" pos="-8 -12.5 1.1">
+            <geom type="box" size="2 1.2 0.05" material="wood"/>
             <geom type="box" size="1 .1 1.5" pos="0 -1.2 1.5" rgba=".4 .2 .1 1"/>
         </body>
         
@@ -118,7 +118,6 @@
         <site name="laser_2_site" pos="0.2 0 0.15" euler="0 135 0" size=".01" rgba="1 0 0 1"/>
         <site name="laser_3_site" pos="0 0 0.35" euler="0 90 0" size=".01" rgba="1 0 0 1"/>
       </body>
-
       <body name="leveling_base" pos="-0.1 0 0.15">
         <joint name="bin_pitch" axis="0 1 0" damping="10.0" range="-60 60"/>
         <geom type="cylinder" size=".03 .12" euler="90 0 0" rgba=".2 .2 .2 1"/>

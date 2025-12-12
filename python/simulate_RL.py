@@ -144,13 +144,11 @@ def get_scenario_3():
     """, "0 0 0.2"
 
 def get_scenario_4():
-    print("\n--- Generating Scenario 4: Full Mission ---")
-    stairs_xml = ""
-    for i in range(10):
-        stairs_xml += f'<geom name="s{i}" type="box" size="1 .2 .1" pos="4 {-7.7 - (i*0.4)} {0.1 + (i*0.1)}" material="concrete"/>\n'
-
-    return """
-    <geom name="street" type="plane" size="15 15 .1" material="asphalt"/>
+    print("\n--- Generating Scenario 4: Full Mission (Three Houses) ---")
+    
+    # 1. Base Environment
+    base_xml = """
+    <geom name="street" type="plane" size="20 20 .1" material="asphalt"/>
     <body name="van" pos="0 0 0.6">
         <geom type="box" size="1.5 1 0.05" material="metal"/>
         <geom type="box" size="1.5 .05 0.5" pos="0 1.05 0.5" material="metal" rgba=".3 .4 .5 0.5"/>
@@ -160,18 +158,48 @@ def get_scenario_4():
     <body name="ramp" pos="3.0 0 0.32">
         <geom type="box" size="1.6 1 0.05" euler="0 12 0" material="ramp_surface" friction="2.0 0.005 0.0001"/>
     </body>
-    <body name="sidewalk" pos="4 -3.5 0.075"> 
-        <geom type="box" size="5 1.5 0.075" material="concrete"/>
+    <body name="sidewalk" pos="0 -3.5 0.075"> 
+        <geom type="box" size="20 1.5 0.075" material="concrete"/>
     </body>
-    <body name="path" pos="4 -6 0.075">
-        <geom type="box" size="1 1.5 0.075" material="concrete"/>
-    </body>
-    """ + stairs_xml + """
-    <body name="porch" pos="4 -12 1.1">
-        <geom type="box" size="2 1.2 0.1" material="wood"/>
-        <geom type="box" size="1 .1 1.5" pos="0 -1.2 1.5" rgba=".4 .2 .1 1"/>
-    </body>
-    """, "0 0 0.8"
+    """
+
+    # 2. House Generator Loop
+    house_positions_x = [4, -2, -8]
+    
+    houses_xml = ""
+    
+    for i, x_pos in enumerate(house_positions_x):
+        # A. Path connecting sidewalk to stairs
+        houses_xml += f"""
+        <body name="path_{i}" pos="{x_pos} -6 0.075">
+            <geom type="box" size="1 1.5 0.075" material="concrete"/>
+        </body>
+        """
+        
+        # B. Stairs
+        for step in range(10):
+            y_pos = -7.7 - (step * 0.4)
+            z_pos = 0.1 + (step * 0.1)
+            
+            # Default step size (half-extents): 1m wide, 0.2m deep, 0.1m high
+            step_size = "1 .2 .1" 
+
+            if step == 9:
+                z_pos -= 0.05
+                # UPDATE: Make the last step thinner (0.1 * 0.75 = 0.075)
+                step_size = "1 .2 .1"
+
+            houses_xml += f'<geom name="s{i}_{step}" type="box" size="{step_size}" pos="{x_pos} {y_pos:.2f} {z_pos:.2f}" material="concrete"/>\n'
+
+        # C. Porch
+        houses_xml += f"""
+        <body name="porch_{i}" pos="{x_pos} -12.5 1.1">
+            <geom type="box" size="2 1.2 0.05" material="wood"/>
+            <geom type="box" size="1 .1 1.5" pos="0 -1.2 1.5" rgba=".4 .2 .1 1"/>
+        </body>
+        """
+
+    return base_xml + houses_xml, "0 0 0.8"
 
 # ==========================================
 # 🛠️ XML BUILDER
