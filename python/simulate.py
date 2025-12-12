@@ -10,20 +10,21 @@ import sys
 # ==========================================
 
 # 1. Trajectory Control Import
-#    Located in: python/traj_planning/traj_control.py
 try:
     from traj_planning.traj_control import traj_control as current_traj_control
     from traj_planning.create_path import create_path
 except ImportError as e:
     print("⚠️ Warning: Could not import trajectory controller file")
-    print("ImportError details:", e)
-    raise
+    # We define a dummy function if import fails to prevent runtime errors
+    def current_traj_control(model, data, scene): return 0.0, 0.0
+    def create_path(model, data, scene): return []
 
 # 2. Climb Control Import
 try:
     from controllers.sensor_based_climb_controller import climb_control as current_climb_control
 except ImportError:
     print("⚠️ Warning: Could not import controllers file.")
+    def current_climb_control(model, data): return 0.0
 
 # ==========================================
 # ⚙️ GLOBAL SETTINGS
@@ -35,14 +36,9 @@ USE_CLIMB_CONTROL = True
 # ==========================================
 # 📂 PATH SETUP
 # ==========================================
-# 1. Get the absolute path to the folder containing this script
 script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# 2. Construct the path to the XML file safely
 xml_folder = os.path.join(script_dir, "..", "mujoco")
 XML_PATH = os.path.join(xml_folder, "ray_simulation.xml")
-
-# 3. Clean the path (resolves '..' and fixes slashes for specific OS)
 XML_PATH = os.path.normpath(XML_PATH)
 
 # ==========================================
@@ -61,14 +57,11 @@ ROBOT_XML = """
       <site name="sens_chassis" pos="0 0 0.2" size=".02" rgba="1 0 0 1"/>
 
       <body name="laser_array" pos="0.25 0 0">
-        
         <site name="laser_1_site" pos="0.2 0 0.05" euler="0 135 0" size=".01" rgba="1 0 0 1"/>
-
         <site name="laser_2_site" pos="0.2 0 0.15" euler="0 135 0" size=".01" rgba="1 0 0 1"/>
-
         <site name="laser_3_site" pos="0 0 0.35" euler="0 90 0" size=".01" rgba="1 0 0 1"/>
-
       </body>
+
       <body name="leveling_base" pos="-0.1 0 0.15">
         <joint name="bin_pitch" axis="0 1 0" damping="10.0" range="-60 60"/>
         <geom type="cylinder" size=".03 .12" euler="90 0 0" rgba=".2 .2 .2 1"/>
@@ -142,13 +135,11 @@ def get_scenario_3():
     """, "0 0 0.2"
 
 def get_scenario_4():
-    print("\n--- Generating Scenario 4: Full Mission ---")
-    stairs_xml = ""
-    for i in range(10):
-        stairs_xml += f'<geom name="s{i}" type="box" size="1 .2 .1" pos="4 {-7.7 - (i*0.4)} {0.1 + (i*0.1)}" material="concrete"/>\n'
-
-    return """
-    <geom name="street" type="plane" size="15 15 .1" material="asphalt"/>
+    print("\n--- Generating Scenario 4: Full Mission (Three Houses) ---")
+    
+    # 1. Base Environment
+    base_xml = """
+    <geom name="street" type="plane" size="20 20 .1" material="asphalt"/>
     <body name="van" pos="0 0 0.6">
         <geom type="box" size="1.5 1 0.05" material="metal"/>
         <geom type="box" size="1.5 .05 0.5" pos="0 1.05 0.5" material="metal" rgba=".3 .4 .5 0.5"/>
@@ -158,18 +149,48 @@ def get_scenario_4():
     <body name="ramp" pos="3.0 0 0.32">
         <geom type="box" size="1.6 1 0.05" euler="0 12 0" material="ramp_surface" friction="2.0 0.005 0.0001"/>
     </body>
-    <body name="sidewalk" pos="4 -3.5 0.075"> 
-        <geom type="box" size="5 1.5 0.075" material="concrete"/>
+    <body name="sidewalk" pos="0 -3.5 0.075"> 
+        <geom type="box" size="20 1.5 0.075" material="concrete"/>
     </body>
-    <body name="path" pos="4 -6 0.075">
-        <geom type="box" size="1 1.5 0.075" material="concrete"/>
-    </body>
-    """ + stairs_xml + """
-    <body name="porch" pos="4 -12 1.1">
-        <geom type="box" size="2 1.2 0.1" material="wood"/>
-        <geom type="box" size="1 .1 1.5" pos="0 -1.2 1.5" rgba=".4 .2 .1 1"/>
-    </body>
-    """, "0 0 0.8"
+    """
+
+    # 2. House Generator Loop
+    house_positions_x = [4, -2, -8]
+    
+    houses_xml = ""
+    
+    for i, x_pos in enumerate(house_positions_x):
+        # A. Path connecting sidewalk to stairs
+        houses_xml += f"""
+        <body name="path_{i}" pos="{x_pos} -6 0.075">
+            <geom type="box" size="1 1.5 0.075" material="concrete"/>
+        </body>
+        """
+        
+        # B. Stairs
+        for step in range(10):
+            y_pos = -7.7 - (step * 0.4)
+            z_pos = 0.1 + (step * 0.1)
+            
+            # Default step size (half-extents): 1m wide, 0.2m deep, 0.1m high
+            step_size = "1 .2 .1" 
+
+            if step == 9:
+                z_pos -= 0.05
+                # UPDATE: Make the last step thinner (0.1 * 0.75 = 0.075)
+                step_size = "1 .2 .075"
+
+            houses_xml += f'<geom name="s{i}_{step}" type="box" size="{step_size}" pos="{x_pos} {y_pos:.2f} {z_pos:.2f}" material="concrete"/>\n'
+
+        # C. Porch
+        houses_xml += f"""
+        <body name="porch_{i}" pos="{x_pos} -12 1.1">
+            <geom type="box" size="2 1.2 0.1" material="wood"/>
+            <geom type="box" size="1 .1 1.5" pos="0 -1.2 1.5" rgba=".4 .2 .1 1"/>
+        </body>
+        """
+
+    return base_xml + houses_xml, "0 0 0.8"
 
 # ==========================================
 # 🛠️ XML BUILDER
@@ -284,50 +305,34 @@ def draw_laser_beams(viewer, model, data):
     """
     Draws visible lines for the rangefinders.
     """
-    # 1. Loop through all 3 sensors
     for i in range(1, 4):
         sensor_name = f"laser_{i}"
         site_name = f"laser_{i}_site"
         
         try:
-            # Get IDs
             sens_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR, sensor_name)
             site_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, site_name)
             
-            # Get Start Position (The Site)
             start_pos = data.site_xpos[site_id]
-            
-            # Get Rotation Matrix of the site
             mat = data.site_xmat[site_id].reshape(3, 3)
             
-            # Get Range Reading (Distance)
-            # Sensors are usually stored sequentially in sensordata. 
-            # Safer to look up address:
             adr = model.sensor_adr[sens_id]
             dist = data.sensordata[adr]
             
-            # Handle "No Hit" (MuJoCo returns -1 or max range)
-            if dist < 0: dist = 2.0 # Draw a 2m beam if nothing hit
+            if dist < 0: dist = 2.0 
             
-            # Calculate End Position
-            # Rangefinders usually point along the site's Z-axis (local +Z)
-            # vector = mat @ [0, 0, 1]  <-- MuJoCo standard site Z
-            # But earlier we rotated Y by 45 deg. Let's check direction.
-            # Usually rangefinders shoot along the Site's Z axis.
-            direction = mat[:, 2] # The Z-axis column of the matrix
+            direction = mat[:, 2] 
             
             end_pos = start_pos + (direction * dist)
             
-            # Draw the Line
             if viewer.user_scn.ngeom < viewer.user_scn.maxgeom:
                 mujoco.mjv_connector(
                     viewer.user_scn.geoms[viewer.user_scn.ngeom],
                     type=mujoco.mjtGeom.mjGEOM_CAPSULE,
-                    width=0.01, # Thin beam
+                    width=0.01, 
                     from_=start_pos,
                     to=end_pos
                 )
-                # Color based on distance (Red = Close, Green = Far)
                 if dist < 0.2:
                     viewer.user_scn.geoms[viewer.user_scn.ngeom].rgba = np.array([1, 0, 0, 1])
                 else:
@@ -335,7 +340,6 @@ def draw_laser_beams(viewer, model, data):
                     
                 viewer.user_scn.ngeom += 1
                 
-                # Draw a dot at the hit point
                 if viewer.user_scn.ngeom < viewer.user_scn.maxgeom:
                     mujoco.mjv_initGeom(
                         viewer.user_scn.geoms[viewer.user_scn.ngeom],
@@ -347,36 +351,21 @@ def draw_laser_beams(viewer, model, data):
                     )
                     viewer.user_scn.ngeom += 1
         except Exception as e:
-            pass # Sensor might not exist yet
-        
-        
+            pass
+
 # ==========================================
 # 🎮 SIMULATION CONTROL
 # ==========================================
 
 def get_sensor_value(model, data, sensor_name):
-    """
-    Returns the scalar value of a sensor by name.
-    Returns -1.0 if the sensor name is invalid.
-    """
     try:
-        # 1. Get the ID of the sensor string
         sens_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR, sensor_name)
-        
-        # 2. Get the array address (index) for this sensor
-        # (This is needed because some sensors like quaternions use 4 slots)
         adr = model.sensor_adr[sens_id]
-        
-        # 3. Read the value from the global sensor array
-        # Rangefinders return a single scalar distance (meters)
         return data.sensordata[adr]
-        
     except Exception:
-        # Warning: Sensor not found
         return -1.0
     
 def get_body_pitch(model, data, body_name):
-    """Helper to get the pitch angle (y-axis rotation)."""
     try:
         body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name)
     except Exception:
@@ -387,55 +376,37 @@ def get_body_pitch(model, data, body_name):
     return pitch
 
 def controller(model, data, scene):
-    """
-    Controller logic with added Stuck Assist.
-    """
     id_drive = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_forward")
     id_turn = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_turn")
     id_climb = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "actuator_climb")
     id_level = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "level_bin")
 
-    # 1. Drive & Turn (Only if enabled)
+    # 1. Drive & Turn
     if USE_TRAJECTORY_CONTROL:
         drive, turn = current_traj_control(model, data, scene)
         data.ctrl[id_drive] = drive
         data.ctrl[id_turn] = turn
 
-    # 2. Climb Control (Only if enabled)
+    # 2. Climb Control
     if USE_CLIMB_CONTROL:
         climb_val = current_climb_control(model, data)
         data.ctrl[id_climb] = climb_val
 
-        # ====================================================
-        # 🚀 NEW LOGIC: STUCK ASSIST
-        # ====================================================
-        # If velocity is near 0 and top sensor is clear, boost throttle
-        
-        # A. Get Velocity
-        # qvel[0] and qvel[1] are X and Y linear velocities of the chassis
+        # Stuck Assist
         speed = np.linalg.norm(data.qvel[0:2])
-        
-        # B. Get Top Sensor ("wall_sens")
-        # Returns -1 if no hit (infinite), or distance in meters
         d_wall = get_sensor_value(model, data, "wall_sens")
         
-        # C. Check Conditions
-        # - Speed < 0.05: Robot is effectively stopped
-        # - d_wall == -1 or > 0.5: No obstacle immediately in front
         is_stuck = speed < 0.05
         path_clear = (d_wall == -1) or (d_wall > 0.5)
         
         if is_stuck and path_clear:
             current_throttle = data.ctrl[id_drive]
-            
-            # Boost throttle by 0.2 in the direction of travel
-            # (We check > 0.01 to ensure we don't accidentally drive when parked)
             if current_throttle > 0.01:
                 data.ctrl[id_drive] = min(current_throttle + 0.5, 1.0)
             elif current_throttle < -0.01:
                 data.ctrl[id_drive] = max(current_throttle - 0.5, -1.0)
 
-    # 3. Active Leveling (Always on)
+    # 3. Active Leveling
     chassis_pitch = get_body_pitch(model, data, "car")
     data.ctrl[id_level] = -chassis_pitch
 
@@ -453,18 +424,16 @@ def run_simulation(scene: int):
         return
 
     data = mujoco.MjData(model)
-
-    # Waypoints Setup (for visualization)    
+    
+    # Generate waypoints
     WAYPOINTS = create_path(model, data, scene)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         print("\nSimulation Started. Close the window to stop.")
         
-        # Initial Camera Setup
         viewer.cam.distance = 6.0
         viewer.cam.lookat[:] = [3.0, -5.0, 1.0]
         
-        # TIMING VARIABLES
         dt = model.opt.timestep
         target_framerate = 30
         render_interval = 1.0 / target_framerate
@@ -473,16 +442,14 @@ def run_simulation(scene: int):
         while viewer.is_running():
             step_start = time.time()
             
-            # 1. Controller & Physics
             controller(model, data, scene)
             mujoco.mj_step(model, data)
             
-            # 2. Render Loop
             if data.time - last_render_time >= render_interval:
                 with viewer.lock(): 
                     viewer.user_scn.ngeom = 0 
-                    # Draw Waypoint Lines
                     draw_laser_beams(viewer, model, data)
+                    
                     for i in range(len(WAYPOINTS) - 1):
                         if viewer.user_scn.ngeom >= viewer.user_scn.maxgeom: break
                         mujoco.mjv_connector(
@@ -497,19 +464,7 @@ def run_simulation(scene: int):
                 
                 viewer.sync()
                 last_render_time = data.time
-                # if int(data.time * 100) % 30 == 0:
-                #         d1 = get_sensor_value(model, data, "floor_sensU")
-                #         d2 = get_sensor_value(model, data, "floor_sensL")
-                #         d3 = get_sensor_value(model, data, "wall_sens")
-                #         print(f"L1(Low): {d1:.3f} | L2(Mid): {d2:.3f} | L3(High): {d3:.3f}")
-
-                #         if d3 > 0 and d3 < 0.75:
-                #             print("Wall detected")
-                #         if d1 - d2 < 0.1:
-                #             print("No floor detected! (step)")
-                #         else:
-                #             print("floor detected! (step)")
-            # 3. Time keeping
+                
             time_until_next_step = model.opt.timestep - (time.time() - step_start)
             if time_until_next_step > 0:
                 time.sleep(time_until_next_step)
@@ -525,10 +480,9 @@ if __name__ == "__main__":
     print("1. Simple Curb (Sanity Check)")
     print("2. Navigation Target (Steering)")
     print("3. Stair Pyramid (Climb & Descend)")
-    print("4. Full Mission (Truck -> Porch)")
+    print("4. Full Mission (Three Houses)")
     print("=========================================")
     
-    # 1. Select Scenario
     valid_choice = False
     choice = 0
     while not valid_choice:
@@ -544,7 +498,6 @@ if __name__ == "__main__":
         except ValueError:
             print("❌ Invalid input. Please enter a number.")
 
-    # 2. Select Control Modes
     print("\n-----------------------------------------")
     print("CONTROL SETTINGS")
     print("-----------------------------------------")
@@ -575,5 +528,4 @@ if __name__ == "__main__":
         else:
             print("Please enter 'y' or 'n'.")
 
-    # 3. Launch
     run_simulation(choice)
