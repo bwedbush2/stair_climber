@@ -1,8 +1,7 @@
 # Finite constrained optimization problem
-import matplotlib.pyplot as plt
 import numpy as np
 import pyomo.environ as pyo
-
+import mujoco
 
 # Euler discretized unicycle model
 # x is state vector, u is input, Ts is sampling period
@@ -14,7 +13,29 @@ def fdis(z, u, Ts):
     z_next[2] = z[2] + Ts*u[1]
     return z_next
 
-def traj_mpc(model, data) -> tuple[float, float] :
+# Helper: get (x, y, yaw) of the car body in world frame
+def _get_car_pose(model, data, body_name="car"):
+    """
+    Returns (x, y, yaw) of the given body in world coordinates.
+    yaw is extracted from the body's rotation matrix assuming z-up.
+    """
+    body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+
+    # World position of body (3,)
+    pos = data.xpos[body_id].copy()
+    x, y = pos[0], pos[1]
+
+    # World rotation matrix of body (3x3), stored flat in row-major order
+    R_flat = data.xmat[body_id].copy()
+    R = R_flat.reshape(3, 3)
+
+    # Heading is body x-axis in world frame
+    heading = R[:, 0]
+    yaw = np.arctan2(heading[1], heading[0])
+
+    return [x, y, yaw]
+
+def traj_mpc(model, data, path) -> tuple[float, float] :
     '''
     This is a controller that uses MPC to optimize trajector control
     given desired waypoints
@@ -25,9 +46,9 @@ def traj_mpc(model, data) -> tuple[float, float] :
     :rtype: tuple[float, float]
     '''
     # Simulation params
-    Ts = model.opt.timestep
-    TFinal = 1      # picked to be 1 second. Increase if myopic. Decrease if computation is slow
-    N = TFinal / Ts # Horizon
+    Ts = model.opt.timestep     # time step for simulation model
+    TFinal = 1                  # picked to be 1 second. Increase if myopic. Decrease if computation is slow
+    N = TFinal / Ts             # Horizon
 
     nx = 3         # number of states (x,y,theta)
     nu = 2         # number of inputs u1=v, u2=omega
@@ -42,8 +63,14 @@ def traj_mpc(model, data) -> tuple[float, float] :
     model.u = pyo.Var(model.uidx, model.tidx)
 
     # Constraints:
-    z0=[0,0,0]
-    zf=[1,0.3,np.pi/4]
+    z0 = _get_car_pose(model, data)
+
+    target_idx = data.userdata[1]
+    xt, yt, _ = path[target_idx]    # target waypoint
+    # NEXT target waypoint
+    xt_next, yt_next, _ = path[target_idx + 1] if target_idx < len(path) else [xt,yt,0]
+    #yawt = 
+    zf=[xt,yt,np.pi/4]
 
     # Objective:
     model.shortest_time_cost  = sum((model.z[1, t]-zf[1])**2 for t in model.tidx if t < N)
@@ -76,7 +103,7 @@ def traj_mpc(model, data) -> tuple[float, float] :
 
     # Now we can solve:
     solver = pyo.SolverFactory('ipopt')
-    results = solver.solve(model)
+    solver.solve(model)
 
     u1 = [pyo.value(model.u[0,0])]
     u2 = [pyo.value(model.u[1,0])]
