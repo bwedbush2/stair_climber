@@ -229,7 +229,7 @@ def get_scenario_4():
 
         # C. Porch (Fixed Position for all houses)
         houses_xml += f"""
-        <body name="porch_{i}" pos="{x_pos} -12.5 1.1">
+        <body name="porch_{i}" pos="{x_pos} -12.5 1.0">
             <geom type="box" size="2 1.2 0.05" material="wood"/>
             <geom type="box" size="1 .1 1.5" pos="0 -1.2 1.5" rgba=".4 .2 .1 1"/>
         </body>

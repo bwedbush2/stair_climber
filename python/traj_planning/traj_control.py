@@ -11,7 +11,7 @@ USERDATA_WP_INDEX  = 1   # current waypoint index (stored as float, cast to int)
 
 # Parameters
 _WAYPOINT_TOL = 0.40  # [m] distance at which a waypoint is reached
-_MAX_DRV = 0.75       # clip commands
+_MAX_DRV = 0.5      # clip commands
 _MAX_TRN = 1.0
 
 # Internal (Python-side) cache for the path only

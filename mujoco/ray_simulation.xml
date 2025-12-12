@@ -59,7 +59,7 @@
 <geom name="s0_8" type="box" size="1 .2 .1" pos="4 -10.90 0.90" material="concrete"/>
 <geom name="s0_9" type="box" size="1 .2 .075" pos="4 -11.30 0.97" material="concrete"/>
 
-        <body name="porch_0" pos="4 -12.5 1.1">
+        <body name="porch_0" pos="4 -12.5 1.0">
             <geom type="box" size="2 1.2 0.05" material="wood"/>
             <geom type="box" size="1 .1 1.5" pos="0 -1.2 1.5" rgba=".4 .2 .1 1"/>
         </body>
@@ -74,7 +74,7 @@
 <geom name="s1_4" type="box" size="1 .6 .125" pos="-2 -10.70 0.82" material="concrete"/>
 <geom name="s1_5" type="box" size="1 .6 .125" pos="-2 -11.45 1.00" material="concrete"/>
 
-        <body name="porch_1" pos="-2 -12.5 1.1">
+        <body name="porch_1" pos="-2 -12.5 1.0">
             <geom type="box" size="2 1.2 0.05" material="wood"/>
             <geom type="box" size="1 .1 1.5" pos="0 -1.2 1.5" rgba=".4 .2 .1 1"/>
         </body>
@@ -93,7 +93,7 @@
 <geom name="s2_8" type="box" size="1 .25 .1" pos="-8.80 -10.90 0.90" material="concrete"/>
 <geom name="s2_9" type="box" size="1 .25 .075" pos="-8.40 -11.30 0.97" material="concrete"/>
 
-        <body name="porch_2" pos="-8 -12.5 1.1">
+        <body name="porch_2" pos="-8 -12.5 1.0">
             <geom type="box" size="2 1.2 0.05" material="wood"/>
             <geom type="box" size="1 .1 1.5" pos="0 -1.2 1.5" rgba=".4 .2 .1 1"/>
         </body>
