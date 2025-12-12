@@ -165,7 +165,6 @@ def get_scenario_4():
 
     # 2. House Generator Loop
     house_positions_x = [4, -2, -8]
-    
     houses_xml = ""
     
     for i, x_pos in enumerate(house_positions_x):
@@ -176,22 +175,59 @@ def get_scenario_4():
         </body>
         """
         
-        # B. Stairs
-        for step in range(10):
-            y_pos = -7.7 - (step * 0.4)
-            z_pos = 0.1 + (step * 0.1)
+        # --- HOUSE 1: STANDARD (Thinner top step) ---
+        if i == 0:
+            for step in range(10):
+                y_pos = -7.7 - (step * 0.4)
+                z_pos = 0.1 + (step * 0.1)
+                step_size = "1 .2 .1" 
+                if step == 9:
+                    z_pos -= 0.025
+                    step_size = "1 .2 .075"
+                houses_xml += f'<geom name="s{i}_{step}" type="box" size="{step_size}" pos="{x_pos} {y_pos:.2f} {z_pos:.2f}" material="concrete"/>\n'
+
+        # --- HOUSE 2: THICKER & LONGER STEPS ---
+        elif i == 1:
+            # Reaching from -7.7 to -11.3 (3.6m distance)
+            # 6 steps * 0.6m spacing = 3.6m. 
+            # Step size 0.5 (half-extent) = 1.0m long blocks for a very deep tread.
+            for step in range(6):
+                y_pos = -7.7 - (step * 0.75)
+                z_pos = 0.1 + (step * 0.18) # Slightly taller rise
+                step_size = "1 .6 .125" # Longer (0.5) and Thicker (0.15)
+                
+                houses_xml += f'<geom name="s{i}_{step}" type="box" size="{step_size}" pos="{x_pos} {y_pos:.2f} {z_pos:.2f}" material="concrete"/>\n'
+
+        # --- HOUSE 3: V-SHAPED POSITIONS (Parallel Orientation) ---
+        elif i == 2:
+            # We use 10 steps. 
+            # First 5 move away from x_pos, last 5 return to x_pos.
+            # All steps have euler="0 0 0" to stay parallel.
+            start_y = -7.7
+            end_y = -11.3
+            apex_x_offset = -2.0 # How far the 'V' bows out
             
-            # Default step size (half-extents): 1m wide, 0.2m deep, 0.1m high
-            step_size = "1 .2 .1" 
+            for step in range(10):
+                z_pos = 0.1 + (step * 0.1)
+                y_pos = start_y - (step * 0.4)
+                
+                # V-Shape X Logic
+                if step < 5:
+                    # Moving toward apex
+                    current_x = x_pos + (step / 5.0) * apex_x_offset
+                else:
+                    # Returning from apex
+                    current_x = (x_pos + apex_x_offset) - ((step - 5) / 5.0) * apex_x_offset
+                
+                step_size = "1 .25 .1"
+                if step == 9:
+                    z_pos -= 0.025
+                    step_size = "1 .25 .075"
 
-            if step == 9:
-                z_pos -= 0.05
-                # UPDATE: Make the last step thinner (0.1 * 0.75 = 0.075)
-                step_size = "1 .2 .1"
+                # Note: No euler attribute means they stay parallel to the porch
+                houses_xml += f'<geom name="s{i}_{step}" type="box" size="{step_size}" pos="{current_x:.2f} {y_pos:.2f} {z_pos:.2f}" material="concrete"/>\n'
 
-            houses_xml += f'<geom name="s{i}_{step}" type="box" size="{step_size}" pos="{x_pos} {y_pos:.2f} {z_pos:.2f}" material="concrete"/>\n'
-
-        # C. Porch
+        # C. Porch (Fixed Position for all houses)
         houses_xml += f"""
         <body name="porch_{i}" pos="{x_pos} -12.5 1.1">
             <geom type="box" size="2 1.2 0.05" material="wood"/>
@@ -200,6 +236,7 @@ def get_scenario_4():
         """
 
     return base_xml + houses_xml, "0 0 0.8"
+
 
 # ==========================================
 # 🛠️ XML BUILDER
