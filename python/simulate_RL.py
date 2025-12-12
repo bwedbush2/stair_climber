@@ -507,63 +507,92 @@ def run_simulation(scene: int, rl_agent=None):
 
     data = mujoco.MjData(model)
 
+    # 1. Setup Logging and Results Path
+    # "one level up from the python folder"
+    results_dir = os.path.normpath(os.path.join(script_dir, "..", "results"))
+    os.makedirs(results_dir, exist_ok=True)
+    
+    # Store data as list of dicts or tuples
+    telemetry_log = []
+    mission_finished = False
+
     # Waypoints Setup  
     WAYPOINTS = create_path(model, data, scene)
+    final_goal = np.array(WAYPOINTS[-1][:2]) if WAYPOINTS else None
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
-        print("\nSimulation Started. Close the window to stop.")
+        print("\nSimulation Started. Data recording is active.")
         
         viewer.cam.distance = 6.0
         viewer.cam.lookat[:] = [3.0, -5.0, 1.0]
         
-        dt = model.opt.timestep
-        target_framerate = 30
-        render_interval = 1.0 / target_framerate
+        render_interval = 1.0 / 30
         last_render_time = 0.0
         
         while viewer.is_running():
             step_start = time.time()
             
-            # 1. Controller & Physics
+            # Physics & Control
             controller(model, data, scene, rl_agent)
-            
-            # Physics Step (Replicating the 20-step ratio used in training is optional 
-            # but recommended for RL accuracy. For visual smoothness we do 1 step here)
             mujoco.mj_step(model, data)
+
+            # --- DATA RECORDING ---
+            # Extract Actuator Values
+            # Order: [drive_forward, drive_turn, actuator_climb, level_bin]
+            actuator_vals = data.ctrl.copy()
             
-            # 2. Render Loop
+            # Extract Robot XY (from freejoint qpos[0:2])
+            robot_x = data.qpos[0]
+            robot_y = data.qpos[1]
+            
+            telemetry_log.append({
+                "time": data.time,
+                "x": robot_x,
+                "y": robot_y,
+                "actuators": actuator_vals.tolist()
+            })
+
+            # --- COMPLETION CHECK ---
+            if final_goal is not None and not mission_finished:
+                dist_to_goal = np.linalg.norm(np.array([robot_x, robot_y]) - final_goal)
+                if dist_to_goal < 0.5:
+                    print("\n✅ ALL WAYPOINTS REACHED! Saving data...")
+                    mission_finished = True
+                    # Optional: break or continue to let user see the finish
+                    # break 
+
+            # Rendering
             if data.time - last_render_time >= render_interval:
                 with viewer.lock(): 
                     viewer.user_scn.ngeom = 0 
                     draw_laser_beams(viewer, model, data)
-                    
-                    # Draw Waypoints
                     for i in range(len(WAYPOINTS) - 1):
-                        if viewer.user_scn.ngeom >= viewer.user_scn.maxgeom: break
-                        mujoco.mjv_connector(
-                            viewer.user_scn.geoms[viewer.user_scn.ngeom],
-                            type=mujoco.mjtGeom.mjGEOM_CAPSULE,
-                            width=0.05,
-                            from_=np.array(WAYPOINTS[i]),
-                            to=np.array(WAYPOINTS[i+1])
-                        )
-                        viewer.user_scn.geoms[viewer.user_scn.ngeom].rgba = np.array([1, 1, 0, 1])
+                        mujoco.mjv_connector(viewer.user_scn.geoms[viewer.user_scn.ngeom],
+                                           type=mujoco.mjtGeom.mjGEOM_CAPSULE, width=0.05,
+                                           from_=np.array(WAYPOINTS[i]), to=np.array(WAYPOINTS[i+1]))
+                        viewer.user_scn.geoms[viewer.user_scn.ngeom].rgba = [1, 1, 0, 1]
                         viewer.user_scn.ngeom += 1
-                
                 viewer.sync()
                 last_render_time = data.time
-                
-                # Debug Prints
-                if int(data.time * 100) % 30 == 0:
-                        d1 = get_sensor_value(model, data, "floor_sensU")
-                        d2 = get_sensor_value(model, data, "floor_sensL")
-                        d3 = get_sensor_value(model, data, "wall_sens")
-                        # print(f"L1: {d1:.2f} | L2: {d2:.2f} | L3: {d3:.2f}")
 
-            # 3. Time keeping
             time_until_next_step = model.opt.timestep - (time.time() - step_start)
             if time_until_next_step > 0:
                 time.sleep(time_until_next_step)
+
+    # --- SAVE TO FILE AFTER LOOP ---
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    filename = f"simulation_results_scene_{scene}_{timestamp}.txt"
+    file_path = os.path.join(results_dir, filename)
+    
+    print(f"💾 Writing telemetry to: {file_path}")
+    with open(file_path, "w") as f:
+        # Header
+        f.write("Time, X, Y, Drive_Fwd, Drive_Turn, Climb, Level_Bin\n")
+        for entry in telemetry_log:
+            acts = ", ".join([f"{v:.4f}" for v in entry['actuators']])
+            line = f"{entry['time']:.4f}, {entry['x']:.4f}, {entry['y']:.4f}, {acts}\n"
+            f.writelines(line)
+    print("✅ Done.")
 
 # ==========================================
 # 🚀 MAIN EXECUTION
