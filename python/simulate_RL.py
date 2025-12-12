@@ -166,7 +166,7 @@ def get_scenario_4():
         </body>
         """
         
-        # --- HOUSE 1: STANDARD (Thinner top step) ---
+        # --- HOUSE 1: STANDARD ---
         if i == 0:
             for step in range(10):
                 y_pos = -7.7 - (step * 0.4)

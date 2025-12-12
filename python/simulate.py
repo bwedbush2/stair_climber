@@ -11,7 +11,7 @@ try:
     from traj_planning.traj_control import traj_control as current_traj_control
     from traj_planning.create_path import create_path
 except ImportError as e:
-    print("⚠️ Warning: Could not import trajectory controller file")
+    print("Warning: Could not import trajectory controller file")
     # We define a dummy function if import fails to prevent runtime errors
     def current_traj_control(model, data, scene): return 0.0, 0.0
     def create_path(model, data, scene): return []
@@ -20,7 +20,7 @@ except ImportError as e:
 try:
     from controllers.sensor_based_climb_controller import climb_control as current_climb_control
 except ImportError:
-    print("⚠️ Warning: Could not import controllers file.")
+    print("Warning: Could not import controllers file.")
     def current_climb_control(model, data): return 0.0
 
 
@@ -170,7 +170,6 @@ def get_scenario_4():
 
             if step == 9:
                 z_pos -= 0.05
-                # UPDATE: Make the last step thinner (0.1 * 0.75 = 0.075)
                 step_size = "1 .2 .1"
 
             houses_xml += f'<geom name="s{i}_{step}" type="box" size="{step_size}" pos="{x_pos} {y_pos:.2f} {z_pos:.2f}" material="concrete"/>\n'
