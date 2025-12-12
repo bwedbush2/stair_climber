@@ -507,12 +507,10 @@ def run_simulation(scene: int, rl_agent=None):
 
     data = mujoco.MjData(model)
 
-    # 1. Setup Logging and Results Path
-    # "one level up from the python folder"
+    # 1. Setup Logging Path
     results_dir = os.path.normpath(os.path.join(script_dir, "..", "results"))
     os.makedirs(results_dir, exist_ok=True)
     
-    # Store data as list of dicts or tuples
     telemetry_log = []
     mission_finished = False
 
@@ -537,11 +535,7 @@ def run_simulation(scene: int, rl_agent=None):
             mujoco.mj_step(model, data)
 
             # --- DATA RECORDING ---
-            # Extract Actuator Values
-            # Order: [drive_forward, drive_turn, actuator_climb, level_bin]
             actuator_vals = data.ctrl.copy()
-            
-            # Extract Robot XY (from freejoint qpos[0:2])
             robot_x = data.qpos[0]
             robot_y = data.qpos[1]
             
@@ -556,10 +550,8 @@ def run_simulation(scene: int, rl_agent=None):
             if final_goal is not None and not mission_finished:
                 dist_to_goal = np.linalg.norm(np.array([robot_x, robot_y]) - final_goal)
                 if dist_to_goal < 0.5:
-                    print("\n✅ ALL WAYPOINTS REACHED! Saving data...")
+                    print("\n✅ ALL WAYPOINTS REACHED!")
                     mission_finished = True
-                    # Optional: break or continue to let user see the finish
-                    # break 
 
             # Rendering
             if data.time - last_render_time >= render_interval:
@@ -579,20 +571,30 @@ def run_simulation(scene: int, rl_agent=None):
             if time_until_next_step > 0:
                 time.sleep(time_until_next_step)
 
-    # --- SAVE TO FILE AFTER LOOP ---
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
-    filename = f"simulation_results_scene_{scene}_{timestamp}.txt"
-    file_path = os.path.join(results_dir, filename)
+    # --- NEW: POST-SIMULATION SAVE PROMPT ---
+    print("\n" + "="*40)
+    save_choice = input(f"Simulation ended. Save telemetry data ({len(telemetry_log)} frames)? (y/n): ").lower()
     
-    print(f"💾 Writing telemetry to: {file_path}")
-    with open(file_path, "w") as f:
-        # Header
-        f.write("Time, X, Y, Drive_Fwd, Drive_Turn, Climb, Level_Bin\n")
-        for entry in telemetry_log:
-            acts = ", ".join([f"{v:.4f}" for v in entry['actuators']])
-            line = f"{entry['time']:.4f}, {entry['x']:.4f}, {entry['y']:.4f}, {acts}\n"
-            f.writelines(line)
-    print("✅ Done.")
+    if save_choice == 'y':
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        filename = f"simulation_results_scene_{scene}_{timestamp}.txt"
+        file_path = os.path.join(results_dir, filename)
+        
+        print(f"💾 Writing telemetry to: {file_path}")
+        try:
+            with open(file_path, "w") as f:
+                f.write("Time, X, Y, Drive_Fwd, Drive_Turn, Climb, Level_Bin\n")
+                for entry in telemetry_log:
+                    acts = ", ".join([f"{v:.4f}" for v in entry['actuators']])
+                    line = f"{entry['time']:.4f}, {entry['x']:.4f}, {entry['y']:.4f}, {acts}\n"
+                    f.writelines(line)
+            print("✅ Data saved successfully.")
+        except Exception as e:
+            print(f"❌ Error writing file: {e}")
+    else:
+        print("🗑️ Data discarded.")
+    
+    print("="*40)
 
 # ==========================================
 # 🚀 MAIN EXECUTION
