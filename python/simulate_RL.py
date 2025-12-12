@@ -118,7 +118,7 @@ def get_scenario_2():
     """, "0 0 0.2"
 
 def get_scenario_3():
-    print("\n--- Generating Scenario 3: Stair Pyramid (Reduced Height) ---")
+    print("\n--- Generating Scenario 3: Stair Pyramid ---")
     return """
     <geom name="floor" type="plane" size="10 10 .1" material="grid"/>
     <body name="stair_pyramid" pos="2 0 0">
