@@ -5,47 +5,37 @@ import time
 import os
 import sys
 
-# CONTROL IMPORTS
 
-# 1. Trajectory Control Import
 try:
     from traj_planning.traj_control import traj_control as current_traj_control
     from traj_planning.create_path import create_path
 except ImportError as e:
-    print("Warning: Could not import trajectory controller file")
-    print("ImportError details:", e)
+    print("No Traj File")
+    print("Error:", e)
 
-# 2. Climb Control Import (Standard)
 try:
     from controllers.climbing_controller import climb_control as current_climb_control
 except ImportError:
     pass
-
-# ### --- RL INTEGRATION START --- ###
-# 3. RL Model Import (Stable Baselines3)
 try:
     from stable_baselines3 import PPO
     RL_AVAILABLE = True
 except ImportError:
-    print("Warning: Stable-Baselines3 not found. RL control disabled.")
+    print("Check your pip!!!")
     RL_AVAILABLE = False
-# ### --- RL INTEGRATION END --- ###
 
-# GLOBAL SETTINGS
+
 USE_TRAJECTORY_CONTROL = True
 USE_CLIMB_CONTROL = True
-USE_RL_FOR_CLIMB = False # Will toggle this in main()
+USE_RL_FOR_CLIMB = False 
 
-# PATH SETUP
 script_dir = os.path.dirname(os.path.abspath(__file__))
 xml_folder = os.path.join(script_dir, "..", "mujoco")
 XML_PATH = os.path.join(xml_folder, "ray_simulation.xml")
 XML_PATH = os.path.normpath(XML_PATH)
 
-# Path to the trained model
-MODEL_PATH = os.path.join(script_dir, "Trained Climbing Models", "Version 1 (Stable)") # Assumes the .zip file is in the same folder
+MODEL_PATH = os.path.join(script_dir, "Trained Climbing Models", "Version 1 (Stable)")
 
-# ROBOT DEFINITION & SCENARIOS
 ROBOT_XML = """
     <body name="car" pos="{START_POS}"> 
       <freejoint/>
@@ -137,7 +127,6 @@ def get_scenario_3():
 def get_scenario_4():
     print("\n--- Generating Scenario 4: Full Mission (Three Houses) ---")
     
-    # Base Environment
     base_xml = """
     <geom name="street" type="plane" size="20 20 .1" material="asphalt"/>
     <body name="van" pos="0 0 0.6">
@@ -154,19 +143,16 @@ def get_scenario_4():
     </body>
     """
 
-    # House Generator Loop
     house_positions_x = [4, -2, -8]
     houses_xml = ""
     
     for i, x_pos in enumerate(house_positions_x):
-        # Path connecting sidewalk to stairs
         houses_xml += f"""
         <body name="path_{i}" pos="{x_pos} -6 0.075">
             <geom type="box" size="1 1.5 0.075" material="concrete"/>
         </body>
         """
         
-        # --- HOUSE 1: STANDARD ---
         if i == 0:
             for step in range(10):
                 y_pos = -7.7 - (step * 0.4)
@@ -177,37 +163,26 @@ def get_scenario_4():
                     step_size = "1 .2 .075"
                 houses_xml += f'<geom name="s{i}_{step}" type="box" size="{step_size}" pos="{x_pos} {y_pos:.2f} {z_pos:.2f}" material="concrete"/>\n'
 
-        # --- HOUSE 2: THICKER & LONGER STEPS ---
         elif i == 1:
-            # Reaching from -7.7 to -11.3 (3.6m distance)
-            # 6 steps * 0.6m spacing = 3.6m. 
-            # Step size 0.5 (half-extent) = 1.0m long blocks for a very deep tread.
             for step in range(6):
                 y_pos = -7.7 - (step * 0.75)
-                z_pos = 0.1 + (step * 0.18) # Slightly taller rise
-                step_size = "1 .6 .125" # Longer (0.5) and Thicker (0.15)
+                z_pos = 0.1 + (step * 0.18) 
+                step_size = "1 .6 .125" 
                 
                 houses_xml += f'<geom name="s{i}_{step}" type="box" size="{step_size}" pos="{x_pos} {y_pos:.2f} {z_pos:.2f}" material="concrete"/>\n'
 
-        # --- HOUSE 3: V-SHAPED POSITIONS ---
         elif i == 2:
-            # We use 10 steps. 
-            # First 5 move away from x_pos, last 5 return to x_pos.
-            # All steps have euler="0 0 0" to stay parallel.
             start_y = -7.7
             end_y = -11.3
-            apex_x_offset = -2.0 # How far the 'V' bows out
+            apex_x_offset = -2.0 
             
             for step in range(10):
                 z_pos = 0.1 + (step * 0.1)
                 y_pos = start_y - (step * 0.4)
                 
-                # V-Shape X Logic
                 if step < 5:
-                    # Moving toward apex
                     current_x = x_pos + (step / 5.0) * apex_x_offset
                 else:
-                    # Returning from apex
                     current_x = (x_pos + apex_x_offset) - ((step - 5) / 5.0) * apex_x_offset
                 
                 step_size = "1 .25 .1"
@@ -215,10 +190,8 @@ def get_scenario_4():
                     z_pos -= 0.025
                     step_size = "1 .25 .075"
 
-                # Note: No euler attribute means they stay parallel to the porch
                 houses_xml += f'<geom name="s{i}_{step}" type="box" size="{step_size}" pos="{current_x:.2f} {y_pos:.2f} {z_pos:.2f}" material="concrete"/>\n'
 
-        # Porch
         houses_xml += f"""
         <body name="porch_{i}" pos="{x_pos} -12.5 1.0">
             <geom type="box" size="2 1.2 0.05" material="wood"/>
@@ -229,7 +202,6 @@ def get_scenario_4():
     return base_xml + houses_xml, "0 0 0.8"
 
 
-# XML BUILDER
 def build_xml(scenario_id):
     world_xml = ""
     start_pos = "0 0 0.2"
@@ -340,8 +312,7 @@ def draw_laser_beams(viewer, model, data):
     Draws visible lines for the rangefinders.
     """
     for i in range(1, 4):
-        sensor_name = f"laser_{i}" if i <= 3 else "wall_sens" # Handle naming variation
-        # Actually easier to use the explicit names in our XML:
+        sensor_name = f"laser_{i}" if i <= 3 else "wall_sens" 
         if i == 1: s_name = "floor_sensL"; site_name="laser_1_site"
         elif i == 2: s_name = "floor_sensU"; site_name="laser_2_site"
         elif i == 3: s_name = "wall_sens"; site_name="laser_3_site"
@@ -390,7 +361,6 @@ def draw_laser_beams(viewer, model, data):
             pass 
         
         
-# CONTROLLER & HELPERS
 def get_sensor_value(model, data, sensor_name):
     try:
         sens_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR, sensor_name)
@@ -409,19 +379,15 @@ def get_body_pitch(model, data, body_name):
     pitch = np.arcsin(2 * (w * y - z * x))
     return pitch
 
-# --- RL OBSERVATION BUILDER ---
 def get_rl_observation(model, data):
     """Reconstructs the 7-value array expected by the trained model"""
-    # Pitch & Roll
     q = data.qpos[3:7] 
     pitch = np.arcsin(np.clip(2 * (q[0]*q[2] - q[3]*q[1]), -1, 1))
     roll  = np.arctan2(2*(q[0]*q[1]+q[2]*q[3]), 1-2*(q[1]**2+q[2]**2))
     
-    # Bogie Actuator State
     climb_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "actuator_climb")
     bogie = data.ctrl[climb_id]
     
-    # Sensors
     l1 = get_sensor_value(model, data, "floor_sensL")
     l2 = get_sensor_value(model, data, "floor_sensU")
     l3 = get_sensor_value(model, data, "wall_sens")
@@ -429,7 +395,6 @@ def get_rl_observation(model, data):
     l2 = 2.0 if l2 < 0 else l2
     l3 = 2.0 if l3 < 0 else l3
 
-    # Velocity
     vel = np.linalg.norm(data.qvel[:2])
 
     id_drive = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_forward")
@@ -437,44 +402,34 @@ def get_rl_observation(model, data):
     
     return np.array([pitch, roll, bogie, l1, l2, l3, vel, drive], dtype=np.float32)
 
-# Global memory for RL smoothing
 rl_filtered_action = 0.0
 
 def controller(model, data, scene, rl_agent=None):
     global rl_filtered_action
 
-    # IDs
     id_drive = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_forward")
     id_turn = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_turn")
     id_climb = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "actuator_climb")
     id_level = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "level_bin")
 
-    # DEFAULT: Trajectory Planner
     drive_cmd, turn_cmd = 0.0, 0.0
     if USE_TRAJECTORY_CONTROL:
         drive_cmd, turn_cmd = current_traj_control(model, data, scene)
         data.ctrl[id_drive] = drive_cmd
-        data.ctrl[id_turn] = turn_cmd  # Either Trajectory OR RL
+        data.ctrl[id_turn] = turn_cmd  
 
-    # RL CLIMB & TERMINAL GUIDANCE
     climb_cmd = 0.0
 
     if USE_CLIMB_CONTROL and rl_agent is not None:
-        # Get Obs
         obs = get_rl_observation(model, data)
-        wall_dist = obs[5]  # Index 5 is 'wall_sens'
 
-        # Predict [Climb, Turn]
         action, _ = rl_agent.predict(obs, deterministic=True)
 
-        # Smoothing (Vectorized for both)
-        # Note: rl_filtered_action should now be initialized as np.array([0.0, 0.0])
         alpha = 0.2
         rl_filtered_action = (alpha * action) + ((1 - alpha) * rl_filtered_action)
         climb_cmd = rl_filtered_action[0]
         data.ctrl[id_climb] = climb_cmd
 
-    # 4. LEVELING
     data.ctrl[id_level] = -get_body_pitch(model, data, "car")
 
 def run_simulation(scene: int, rl_agent=None):
@@ -492,14 +447,12 @@ def run_simulation(scene: int, rl_agent=None):
 
     data = mujoco.MjData(model)
 
-    # 1. Setup Logging Path
     results_dir = os.path.normpath(os.path.join(script_dir, "..", "results"))
     os.makedirs(results_dir, exist_ok=True)
     
     telemetry_log = []
     mission_finished = False
 
-    # Waypoints Setup  
     WAYPOINTS = create_path(model, data, scene)
     final_goal = np.array(WAYPOINTS[-1][:2]) if WAYPOINTS else None
 
@@ -515,11 +468,9 @@ def run_simulation(scene: int, rl_agent=None):
         while viewer.is_running():
             step_start = time.time()
             
-            # Physics & Control
             controller(model, data, scene, rl_agent)
             mujoco.mj_step(model, data)
 
-            # --- DATA RECORDING ---
             actuator_vals = data.ctrl.copy()
             robot_x = data.qpos[0]
             robot_y = data.qpos[1]
@@ -531,14 +482,13 @@ def run_simulation(scene: int, rl_agent=None):
                 "actuators": actuator_vals.tolist()
             })
 
-            # --- COMPLETION CHECK ---
             if final_goal is not None and not mission_finished:
                 dist_to_goal = np.linalg.norm(np.array([robot_x, robot_y]) - final_goal)
                 if dist_to_goal < 0.5:
                     print("\nALL WAYPOINTS REACHED!")
                     mission_finished = True
 
-            # Rendering
+
             if data.time - last_render_time >= render_interval:
                 with viewer.lock(): 
                     viewer.user_scn.ngeom = 0 
@@ -556,7 +506,6 @@ def run_simulation(scene: int, rl_agent=None):
             if time_until_next_step > 0:
                 time.sleep(time_until_next_step)
 
-    # --- NEW: POST-SIMULATION SAVE PROMPT ---
     print("\n" + "="*40)
     save_choice = input(f"Simulation ended. Save telemetry data ({len(telemetry_log)} frames)? (y/n): ").lower()
     
@@ -581,10 +530,6 @@ def run_simulation(scene: int, rl_agent=None):
     
     print("="*40)
 
-# ==========================================
-# 🚀 MAIN EXECUTION
-# ==========================================
-
 if __name__ == "__main__":
     print("=========================================")
     print("      RAY ROBOT SIMULATION RUNNER        ")
@@ -595,7 +540,6 @@ if __name__ == "__main__":
     print("4. Full Mission (Three Houses)")
     print("=========================================")
     
-    # 1. Select Scenario
     valid_choice = False
     choice = 0
     while not valid_choice:
@@ -611,46 +555,40 @@ if __name__ == "__main__":
         except ValueError:
             print("Invalid input. Please enter a number.")
 
-    # 2. Select Control Modes
+
     print("\n-----------------------------------------")
     print("CONTROL SETTINGS")
     print("-----------------------------------------")
-    
-    # Trajectory Control
+
+
     if input("Enable Trajectory Control? (y/n): ").lower() == 'n':
         USE_TRAJECTORY_CONTROL = False
     else:
         USE_TRAJECTORY_CONTROL = True
 
-    # Climb Control
     if input("Enable Climb Control? (y/n): ").lower() == 'n':
         USE_CLIMB_CONTROL = False
     else:
         USE_CLIMB_CONTROL = True
         
-        # ASK FOR RL MODE
         if RL_AVAILABLE:
-            rl_in = input("   ↳ Use Trained RL Brain for Climbing? (y/n): ").lower()
+            rl_in = input("Use RL for Climbing? (y/n): ").lower()
             if rl_in == 'y':
                 USE_RL_FOR_CLIMB = True
             else:
                 USE_RL_FOR_CLIMB = False
-                print("   ↳ Using Standard Logic Controller.")
+                print("Using Sensor Controller.")
         else:
-            print("   ↳ RL Library missing. Using Standard Logic.")
+            print("RL not found..?")
             USE_RL_FOR_CLIMB = False
 
-    # 3. Load Model (If needed)
     agent = None
     if USE_RL_FOR_CLIMB:
-        print(f"\nLoading RL Model: {MODEL_PATH}...")
         try:
             agent = PPO.load(MODEL_PATH, device="cpu")
-            print("Model Loaded Successfully!")
+            print("Model loaded")
         except Exception as e:
-            print(f"Error loading model: {e}")
-            print("   Falling back to Standard Logic.")
+            print(f"Error loading: {e}")
             USE_RL_FOR_CLIMB = False
 
-    # 4. Launch
     run_simulation(choice, rl_agent=agent)

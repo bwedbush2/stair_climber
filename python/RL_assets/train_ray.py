@@ -4,12 +4,12 @@ from stable_baselines3.common.callbacks import CheckpointCallback
 import os
 
 def main():
-    print("🛠️  Initializing Training Environment...")
-    env = RayProceduralEnv() # CPU Mode, No Render
+    print("Training Env initializing")
+    env = RayProceduralEnv() 
     
-    # Checkpoint: Save model every 100,000 steps so you don't lose progress
+    # Checkpoint
     checkpoint_callback = CheckpointCallback(
-        save_freq=100_000, 
+        save_freq=1000000, 
         save_path='./ray_checkpoints/',
         name_prefix='ray_stairs'
     )
@@ -19,10 +19,9 @@ def main():
     #     print("🔄 Loading existing model to continue training...")
     #     model = PPO.load("ray_stairs_policy", env=env, device="cpu",
     #                      ent_coef=0.05, learning_rate=3e-4)
-    if False:
-        print("??")
+    if False: 
+        print("how did we get here")
     else:
-        print("🆕 Creating new model...")
         model = PPO(
             "MlpPolicy", 
             env, 
@@ -35,15 +34,13 @@ def main():
             gamma=0.999
         )
 
-    print("🏋️‍♂️ Training Started (Press Ctrl+C to Stop & Save)...")
     try:
-        # 5 Million steps is a good overnight target
-        model.learn(total_timesteps=50_000_000, callback=checkpoint_callback)
+        model.learn(total_timesteps=50000000, callback=checkpoint_callback)
         model.save("ray_stairs_policy")
-        print("✅ DONE! Saved 'ray_stairs_policy.zip'")
+        print("Saved 'ray_stairs_policy.zip'")
     except KeyboardInterrupt:
         model.save("ray_stairs_policy")
-        print("\n🛑 Training Interrupted. Model Saved.")
+        print("Breaking. Model is saved.")
 
 if __name__ == "__main__":
     main()

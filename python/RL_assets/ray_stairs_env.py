@@ -4,7 +4,7 @@ import numpy as np
 import mujoco
 import os
 
-# Define the base robot XML
+
 ROBOT_XML_TEMPLATE = """
     <body name="car" pos="{START_X} 0 {START_Z}"> 
       <freejoint/>
@@ -64,7 +64,7 @@ class RayProceduralEnv(gym.Env):
         self.action_space = spaces.Box(low=np.array([-1.5], dtype=np.float32),
                                        high=np.array([1.5], dtype=np.float32), dtype=np.float32)
 
-        # Observation: 8 values
+        # Observation: 7 values, mentioned in slides
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(8,), dtype=np.float32)
 
         self.model = None
@@ -74,15 +74,13 @@ class RayProceduralEnv(gym.Env):
         self.filtered_action = 0.0
         self.last_raw_action = 0.0
 
-        # TIMERS
         self.step_counter = 0
-        self.max_steps = 2000  # ~60 seconds at 30Hz
+        self.max_steps = 2000  
         self.stall_counter = 0
 
         self._generate_and_load_xml()
 
     def _generate_and_load_xml(self):
-        # 1. RANDOMIZE PARAMETERS
         self.current_step_height = np.random.uniform(0.08, 0.22)
         step_depth = np.random.uniform(0.25, 0.50)
         num_steps = np.random.randint(3, 12)
@@ -93,7 +91,6 @@ class RayProceduralEnv(gym.Env):
         current_x = 2.0
         current_z = 0.0
 
-        # Build UP
         for i in range(num_steps):
             z_center = current_z + (self.current_step_height / 2)
             stair_xml += f"""
@@ -103,7 +100,6 @@ class RayProceduralEnv(gym.Env):
             current_x += step_depth
             current_z += self.current_step_height
 
-        # Build PLATFORM
         plat_len = 1.5
         plat_z_center = current_z - (self.current_step_height / 2)
         stair_xml += f"""
@@ -112,7 +108,6 @@ class RayProceduralEnv(gym.Env):
         """
         current_x += plat_len
 
-        # Build DOWN
         for i in range(num_steps):
             current_z -= self.current_step_height
             z_center = current_z + (self.current_step_height / 2)
@@ -122,7 +117,6 @@ class RayProceduralEnv(gym.Env):
             """
             current_x += step_depth
 
-        # Spawn
         if self.mode == "CLIMB":
             start_x = 0.5
             start_z = 0.2
@@ -211,7 +205,6 @@ class RayProceduralEnv(gym.Env):
         self.filtered_action = 0.0
         self.last_raw_action = 0.0
 
-        # RESET TIMERS
         self.stall_counter = 0
         self.step_counter = 0
 
@@ -241,50 +234,39 @@ class RayProceduralEnv(gym.Env):
         for _ in range(20):
             mujoco.mj_step(self.model, self.data)
 
-        # --- REWARD LOGIC ---
+        # Rewards
         vel_x = self.data.qvel[0]
 
-        # 1. PROGRESS (Velocity)
-        # Using raw velocity is robust.
+        # 1. Vel
         reward_progress = vel_x * 50.0
 
-        # 2. STABILITY (General)
+        # 2. Pitch Stable
         reward_stability = -abs(self._get_pitch()) * 2.0
 
-        # 3. ENERGY (Base Cost)
-        # Always active. discourage extreme values slightly.
-        reward_energy_base = -np.square(raw_action) * 3
+        # 3. Action-based control, more action = bad
+        reward_energy_base = -np.abs(raw_action) * 3
 
-        # 4. CONTEXTUAL SAFETY (The Anti-Wheelie Fix)
-        wall_dist = self._read_sensor("wall_sens")  # Forward High
-        floor_dist = self._read_sensor("floor_sensU")  # Forward Angled Down
+        # 4. Check dist from wall and floor to decide if robot should be punished for using actuator more
+        wall_dist = self._read_sensor("wall_sens")  
+        floor_dist = self._read_sensor("floor_sensU")  
 
-        # A. GEOMETRIC FLAT DETECTION
-        # Wall is Far (> 1.5m)
         wall_is_far = np.clip((wall_dist - 1.5) * 2.0, 0.0, 1.0)
 
-        # Floor is Consistent (> 0.25m)
-        # On flat ground, hypotenuse is ~0.28m. On stairs, it hits face < 0.15m.
-        # Even if doing a wheelie, this sensor sees the floor further ahead, so it stays HIGH.
         floor_is_flat = np.clip((floor_dist - 0.20) * 5.0, 0.0, 1.0)
 
-        # Combined Safety: We are "Safe" if Wall is Far AND Floor is Flat.
-        # Notice: We do NOT check robot pitch here. The robot cannot fake this.
-        safety_factor = wall_is_far * floor_is_flat
+        safety_factor = wall_is_far * floor_is_flat # Safety factor simply is an are we safe check
 
-        # B. PENALTIES (Applied only when Safe/Flat)
+        # 5. Penalties
 
-        # Penalty 1: "Put your legs down"
         # If safe, action should be 0.0. Punish deviation heavily.
         reward_lazy_context = -np.square(raw_action) * 2.0 * safety_factor
 
-        # Penalty 2: "Put your nose down" (Anti-Wheelie)
         # If safe, pitch should be 0.0. Punish tilting heavily.
         reward_flat_pitch = -(self._get_pitch()) * 10.0 * safety_factor
 
         total_context = reward_lazy_context + reward_flat_pitch
         
-        # 5. OTHER
+        # 6. Smoothing and Heading Rewards
         reward_smooth = -np.square(raw_action - self.last_raw_action) * 2.0
         reward_heading = -abs(self._get_yaw()) * 2.0
         reward_time = -1.0
@@ -295,20 +277,20 @@ class RayProceduralEnv(gym.Env):
 
         self.last_raw_action = raw_action
 
-        # --- TERMINATION ---
+        # Terminations  
         terminated = False
 
-        # 1. Fall/Flip
+        # 1. Fall/Flip (-reward)
         if abs(self._get_pitch()) > 1.0 or abs(self._get_roll()) > 1.0: terminated = True; total_reward -= 5000.0
         if self.data.qpos[2] < 0.0: terminated = True; total_reward -= 1000.0  # Fall off world
 
-        # 2. Success
+        # 2. Success (+ reward)
         if self.data.qpos[0] > 12.0:
             terminated = True
             difficulty_mult = 1.0 + (self.current_step_height * 10.0)
             total_reward += 1500.0 * difficulty_mult
 
-        # 3. Stall Check
+        # 3. Stall Check (-reward)
         if vel_x < 0.05:
             self.stall_counter += 1
         else:
@@ -318,14 +300,12 @@ class RayProceduralEnv(gym.Env):
             terminated = True
             total_reward -= 1000.0
 
-            # 4. Hard Time Limit
+        # 4. Hard Sim Step Limit
         if self.step_counter >= self.max_steps:
             terminated = True
-            # No extra penalty needed (already lost 2000 points from reward_time)
 
         return self._get_obs(), total_reward, terminated, False, {}
 
-    # ... (Helpers unchanged) ...
     def _get_obs(self):
         pitch = self._get_pitch()
         roll = self._get_roll()
