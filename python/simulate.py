@@ -5,10 +5,7 @@ import time
 import os
 import sys
 
-# ==========================================
-# 🔌 CONTROL IMPORTS
-# ==========================================
-
+# CONTROL IMPORTS
 # 1. Trajectory Control Import
 try:
     from traj_planning.traj_control import traj_control as current_traj_control
@@ -26,25 +23,21 @@ except ImportError:
     print("⚠️ Warning: Could not import controllers file.")
     def current_climb_control(model, data): return 0.0
 
-# ==========================================
-# ⚙️ GLOBAL SETTINGS
-# ==========================================
+
+# GLOBAL SETTINGS
 # These flags will be set by the user input at runtime
 USE_TRAJECTORY_CONTROL = True
 USE_CLIMB_CONTROL = True
 
-# ==========================================
-# 📂 PATH SETUP
-# ==========================================
+
+# PATH SETUP
 script_dir = os.path.dirname(os.path.abspath(__file__))
 xml_folder = os.path.join(script_dir, "..", "mujoco")
 XML_PATH = os.path.join(xml_folder, "ray_simulation.xml")
 XML_PATH = os.path.normpath(XML_PATH)
 
-# ==========================================
-# 🤖 ROBOT DEFINITION & SCENARIOS
-# ==========================================
 
+# ROBOT DEFINITION & SCENARIOS
 ROBOT_XML = """
     <body name="car" pos="{START_POS}"> 
       <freejoint/>
@@ -137,7 +130,7 @@ def get_scenario_3():
 def get_scenario_4():
     print("\n--- Generating Scenario 4: Full Mission (Three Houses) ---")
     
-    # 1. Base Environment
+    # Base Environment
     base_xml = """
     <geom name="street" type="plane" size="20 20 .1" material="asphalt"/>
     <body name="van" pos="0 0 0.6">
@@ -154,20 +147,20 @@ def get_scenario_4():
     </body>
     """
 
-    # 2. House Generator Loop
+    # House Generator Loop
     house_positions_x = [4, -2, -8]
     
     houses_xml = ""
     
     for i, x_pos in enumerate(house_positions_x):
-        # A. Path connecting sidewalk to stairs
+        # Path connecting sidewalk to stairs
         houses_xml += f"""
         <body name="path_{i}" pos="{x_pos} -6 0.075">
             <geom type="box" size="1 1.5 0.075" material="concrete"/>
         </body>
         """
         
-        # B. Stairs
+        # Stairs
         for step in range(10):
             y_pos = -7.7 - (step * 0.4)
             z_pos = 0.1 + (step * 0.1)
@@ -182,7 +175,7 @@ def get_scenario_4():
 
             houses_xml += f'<geom name="s{i}_{step}" type="box" size="{step_size}" pos="{x_pos} {y_pos:.2f} {z_pos:.2f}" material="concrete"/>\n'
 
-        # C. Porch
+        # Porch
         houses_xml += f"""
         <body name="porch_{i}" pos="{x_pos} -12.5 1.1">
             <geom type="box" size="2 1.2 0.05" material="wood"/>
@@ -192,10 +185,7 @@ def get_scenario_4():
 
     return base_xml + houses_xml, "0 0 0.8"
 
-# ==========================================
-# 🛠️ XML BUILDER
-# ==========================================
-
+# XML BUILDER
 def build_xml(scenario_id):
     world_xml = ""
     start_pos = "0 0 0.2"
@@ -294,10 +284,10 @@ def build_xml(scenario_id):
     try:
         with open(XML_PATH, "w") as f:
             f.write(full_xml)
-        print(f"✅ Generated XML at: {XML_PATH}")
+        print(f"Generated XML at: {XML_PATH}")
         return True
     except Exception as e:
-        print(f"❌ Error writing XML file: {e}")
+        print(f"Error writing XML file: {e}")
         return False
     
 
@@ -353,10 +343,8 @@ def draw_laser_beams(viewer, model, data):
         except Exception as e:
             pass
 
-# ==========================================
-# 🎮 SIMULATION CONTROL
-# ==========================================
 
+# SIMULATION CONTROL
 def get_sensor_value(model, data, sensor_name):
     try:
         sens_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR, sensor_name)
@@ -381,13 +369,13 @@ def controller(model, data, scene):
     id_climb = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "actuator_climb")
     id_level = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "level_bin")
 
-    # 1. Drive & Turn
+    # Drive & Turn
     if USE_TRAJECTORY_CONTROL:
         drive, turn = current_traj_control(model, data, scene)
         data.ctrl[id_drive] = drive
         data.ctrl[id_turn] = turn
 
-    # 2. Climb Control
+    # Climb Control
     if USE_CLIMB_CONTROL:
         climb_val = current_climb_control(model, data)
         data.ctrl[id_climb] = climb_val
@@ -406,12 +394,12 @@ def controller(model, data, scene):
             elif current_throttle < -0.01:
                 data.ctrl[id_drive] = max(current_throttle - 0.5, -1.0)
 
-    # 3. Active Leveling
+    # Active Leveling
     chassis_pitch = get_body_pitch(model, data, "car")
     data.ctrl[id_level] = -chassis_pitch
 
 def run_simulation(scene: int):
-    print(f"\n🚀 Loading Simulation from: {XML_PATH}")
+    print(f"\n Loading Simulation from: {XML_PATH}")
 
     if not os.path.exists(XML_PATH):
         print("CRITICAL ERROR: XML FILE NOT FOUND")
@@ -469,10 +457,8 @@ def run_simulation(scene: int):
             if time_until_next_step > 0:
                 time.sleep(time_until_next_step)
 
-# ==========================================
-# 🚀 MAIN EXECUTION
-# ==========================================
 
+# MAIN EXECUTION
 if __name__ == "__main__":
     print("=========================================")
     print("      RAY ROBOT SIMULATION RUNNER        ")
@@ -494,9 +480,9 @@ if __name__ == "__main__":
                 if build_success:
                     valid_choice = True
             else:
-                print("❌ Please enter a number between 1 and 4.")
+                print("Please enter a number between 1 and 4.")
         except ValueError:
-            print("❌ Invalid input. Please enter a number.")
+            print("Invalid input. Please enter a number.")
 
     print("\n-----------------------------------------")
     print("CONTROL SETTINGS")

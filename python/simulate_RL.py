@@ -5,16 +5,14 @@ import time
 import os
 import sys
 
-# ==========================================
-# 🔌 CONTROL IMPORTS
-# ==========================================
+# CONTROL IMPORTS
 
 # 1. Trajectory Control Import
 try:
     from traj_planning.traj_control import traj_control as current_traj_control
     from traj_planning.create_path import create_path
 except ImportError as e:
-    print("⚠️ Warning: Could not import trajectory controller file")
+    print("Warning: Could not import trajectory controller file")
     print("ImportError details:", e)
 
 # 2. Climb Control Import (Standard)
@@ -29,32 +27,25 @@ try:
     from stable_baselines3 import PPO
     RL_AVAILABLE = True
 except ImportError:
-    print("⚠️ Warning: Stable-Baselines3 not found. RL control disabled.")
+    print("Warning: Stable-Baselines3 not found. RL control disabled.")
     RL_AVAILABLE = False
 # ### --- RL INTEGRATION END --- ###
 
-# ==========================================
-# ⚙️ GLOBAL SETTINGS
-# ==========================================
+# GLOBAL SETTINGS
 USE_TRAJECTORY_CONTROL = True
 USE_CLIMB_CONTROL = True
 USE_RL_FOR_CLIMB = False # Will toggle this in main()
 
-# ==========================================
-# 📂 PATH SETUP
-# ==========================================
+# PATH SETUP
 script_dir = os.path.dirname(os.path.abspath(__file__))
 xml_folder = os.path.join(script_dir, "..", "mujoco")
 XML_PATH = os.path.join(xml_folder, "ray_simulation.xml")
 XML_PATH = os.path.normpath(XML_PATH)
 
-# Path to your trained model
+# Path to the trained model
 MODEL_PATH = os.path.join(script_dir, "Trained Climbing Models", "Version 1 (Stable)") # Assumes the .zip file is in the same folder
 
-# ==========================================
-# 🤖 ROBOT DEFINITION & SCENARIOS
-# ==========================================
-# (Keeping your exact XML definitions)
+# ROBOT DEFINITION & SCENARIOS
 ROBOT_XML = """
     <body name="car" pos="{START_POS}"> 
       <freejoint/>
@@ -146,7 +137,7 @@ def get_scenario_3():
 def get_scenario_4():
     print("\n--- Generating Scenario 4: Full Mission (Three Houses) ---")
     
-    # 1. Base Environment
+    # Base Environment
     base_xml = """
     <geom name="street" type="plane" size="20 20 .1" material="asphalt"/>
     <body name="van" pos="0 0 0.6">
@@ -163,12 +154,12 @@ def get_scenario_4():
     </body>
     """
 
-    # 2. House Generator Loop
+    # House Generator Loop
     house_positions_x = [4, -2, -8]
     houses_xml = ""
     
     for i, x_pos in enumerate(house_positions_x):
-        # A. Path connecting sidewalk to stairs
+        # Path connecting sidewalk to stairs
         houses_xml += f"""
         <body name="path_{i}" pos="{x_pos} -6 0.075">
             <geom type="box" size="1 1.5 0.075" material="concrete"/>
@@ -198,7 +189,7 @@ def get_scenario_4():
                 
                 houses_xml += f'<geom name="s{i}_{step}" type="box" size="{step_size}" pos="{x_pos} {y_pos:.2f} {z_pos:.2f}" material="concrete"/>\n'
 
-        # --- HOUSE 3: V-SHAPED POSITIONS (Parallel Orientation) ---
+        # --- HOUSE 3: V-SHAPED POSITIONS ---
         elif i == 2:
             # We use 10 steps. 
             # First 5 move away from x_pos, last 5 return to x_pos.
@@ -227,7 +218,7 @@ def get_scenario_4():
                 # Note: No euler attribute means they stay parallel to the porch
                 houses_xml += f'<geom name="s{i}_{step}" type="box" size="{step_size}" pos="{current_x:.2f} {y_pos:.2f} {z_pos:.2f}" material="concrete"/>\n'
 
-        # C. Porch (Fixed Position for all houses)
+        # Porch
         houses_xml += f"""
         <body name="porch_{i}" pos="{x_pos} -12.5 1.0">
             <geom type="box" size="2 1.2 0.05" material="wood"/>
@@ -238,10 +229,7 @@ def get_scenario_4():
     return base_xml + houses_xml, "0 0 0.8"
 
 
-# ==========================================
-# 🛠️ XML BUILDER
-# ==========================================
-
+# XML BUILDER
 def build_xml(scenario_id):
     world_xml = ""
     start_pos = "0 0 0.2"
@@ -340,10 +328,10 @@ def build_xml(scenario_id):
     try:
         with open(XML_PATH, "w") as f:
             f.write(full_xml)
-        print(f"✅ Generated XML at: {XML_PATH}")
+        print(f"Generated XML at: {XML_PATH}")
         return True
     except Exception as e:
-        print(f"❌ Error writing XML file: {e}")
+        print(f"Error writing XML file: {e}")
         return False
     
 
@@ -402,10 +390,7 @@ def draw_laser_beams(viewer, model, data):
             pass 
         
         
-# ==========================================
-# 🎮 CONTROLLER & HELPERS
-# ==========================================
-
+# CONTROLLER & HELPERS
 def get_sensor_value(model, data, sensor_name):
     try:
         sens_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR, sensor_name)
@@ -424,19 +409,19 @@ def get_body_pitch(model, data, body_name):
     pitch = np.arcsin(2 * (w * y - z * x))
     return pitch
 
-# ### --- RL OBSERVATION BUILDER --- ###
+# --- RL OBSERVATION BUILDER ---
 def get_rl_observation(model, data):
     """Reconstructs the 7-value array expected by the trained model"""
-    # 1. Pitch & Roll
+    # Pitch & Roll
     q = data.qpos[3:7] 
     pitch = np.arcsin(np.clip(2 * (q[0]*q[2] - q[3]*q[1]), -1, 1))
     roll  = np.arctan2(2*(q[0]*q[1]+q[2]*q[3]), 1-2*(q[1]**2+q[2]**2))
     
-    # 2. Bogie Actuator State
+    # Bogie Actuator State
     climb_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "actuator_climb")
     bogie = data.ctrl[climb_id]
     
-    # 3. Sensors
+    # Sensors
     l1 = get_sensor_value(model, data, "floor_sensL")
     l2 = get_sensor_value(model, data, "floor_sensU")
     l3 = get_sensor_value(model, data, "wall_sens")
@@ -444,7 +429,7 @@ def get_rl_observation(model, data):
     l2 = 2.0 if l2 < 0 else l2
     l3 = 2.0 if l3 < 0 else l3
 
-    # 4. Velocity
+    # Velocity
     vel = np.linalg.norm(data.qvel[:2])
 
     id_drive = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_forward")
@@ -464,14 +449,14 @@ def controller(model, data, scene, rl_agent=None):
     id_climb = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "actuator_climb")
     id_level = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "level_bin")
 
-    # 1. DEFAULT: Trajectory Planner
+    # DEFAULT: Trajectory Planner
     drive_cmd, turn_cmd = 0.0, 0.0
     if USE_TRAJECTORY_CONTROL:
         drive_cmd, turn_cmd = current_traj_control(model, data, scene)
         data.ctrl[id_drive] = drive_cmd
         data.ctrl[id_turn] = turn_cmd  # Either Trajectory OR RL
 
-    # 2. RL CLIMB & TERMINAL GUIDANCE
+    # RL CLIMB & TERMINAL GUIDANCE
     climb_cmd = 0.0
 
     if USE_CLIMB_CONTROL and rl_agent is not None:
@@ -493,7 +478,7 @@ def controller(model, data, scene, rl_agent=None):
     data.ctrl[id_level] = -get_body_pitch(model, data, "car")
 
 def run_simulation(scene: int, rl_agent=None):
-    print(f"\n🚀 Loading Simulation from: {XML_PATH}")
+    print(f"\n Loading Simulation from: {XML_PATH}")
 
     if not os.path.exists(XML_PATH):
         print("CRITICAL ERROR: XML FILE NOT FOUND")
@@ -550,7 +535,7 @@ def run_simulation(scene: int, rl_agent=None):
             if final_goal is not None and not mission_finished:
                 dist_to_goal = np.linalg.norm(np.array([robot_x, robot_y]) - final_goal)
                 if dist_to_goal < 0.5:
-                    print("\n✅ ALL WAYPOINTS REACHED!")
+                    print("\nALL WAYPOINTS REACHED!")
                     mission_finished = True
 
             # Rendering
@@ -580,7 +565,7 @@ def run_simulation(scene: int, rl_agent=None):
         filename = f"simulation_results_scene_{scene}_{timestamp}.txt"
         file_path = os.path.join(results_dir, filename)
         
-        print(f"💾 Writing telemetry to: {file_path}")
+        print(f"Writing telemetry to: {file_path}")
         try:
             with open(file_path, "w") as f:
                 f.write("Time, X, Y, Drive_Fwd, Drive_Turn, Climb, Level_Bin\n")
@@ -588,11 +573,11 @@ def run_simulation(scene: int, rl_agent=None):
                     acts = ", ".join([f"{v:.4f}" for v in entry['actuators']])
                     line = f"{entry['time']:.4f}, {entry['x']:.4f}, {entry['y']:.4f}, {acts}\n"
                     f.writelines(line)
-            print("✅ Data saved successfully.")
+            print("Data saved successfully.")
         except Exception as e:
-            print(f"❌ Error writing file: {e}")
+            print(f"Error writing file: {e}")
     else:
-        print("🗑️ Data discarded.")
+        print("Data discarded.")
     
     print("="*40)
 
@@ -607,7 +592,7 @@ if __name__ == "__main__":
     print("1. Simple Curb (Sanity Check)")
     print("2. Navigation Target (Steering)")
     print("3. Stair Pyramid (Climb & Descend)")
-    print("4. Full Mission (Truck -> Porch)")
+    print("4. Full Mission (Three Houses)")
     print("=========================================")
     
     # 1. Select Scenario
@@ -622,9 +607,9 @@ if __name__ == "__main__":
                 if build_success:
                     valid_choice = True
             else:
-                print("❌ Please enter a number between 1 and 4.")
+                print("Please enter a number between 1 and 4.")
         except ValueError:
-            print("❌ Invalid input. Please enter a number.")
+            print("Invalid input. Please enter a number.")
 
     # 2. Select Control Modes
     print("\n-----------------------------------------")
@@ -658,12 +643,12 @@ if __name__ == "__main__":
     # 3. Load Model (If needed)
     agent = None
     if USE_RL_FOR_CLIMB:
-        print(f"\n🧠 Loading RL Model: {MODEL_PATH}...")
+        print(f"\nLoading RL Model: {MODEL_PATH}...")
         try:
             agent = PPO.load(MODEL_PATH, device="cpu")
-            print("✅ Model Loaded Successfully!")
+            print("Model Loaded Successfully!")
         except Exception as e:
-            print(f"❌ Error loading model: {e}")
+            print(f"Error loading model: {e}")
             print("   Falling back to Standard Logic.")
             USE_RL_FOR_CLIMB = False
 

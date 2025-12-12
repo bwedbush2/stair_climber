@@ -1,9 +1,7 @@
 import numpy as np
 import mujoco
 
-# ==========================================
-# 📐 MATH HELPERS
-# ==========================================
+# MATH HELPERS
 def get_body_pitch(model, data, body_name="car"):
     try:
         body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name)
@@ -14,9 +12,7 @@ def get_body_pitch(model, data, body_name="car"):
     else: pitch = np.arcsin(sinp)
     return pitch
 
-# ==========================================
-# 🧠 CLIMBER LOGIC CLASS
-# ==========================================
+# CLIMBER LOGIC CLASS
 def get_sensor_value(model, data, sensor_name):
     """
     Returns the scalar value of a sensor by name.
@@ -78,8 +74,6 @@ class AdaptiveClimber:
                 self.stall_timer += dt
                 
                 # CRITICAL FIX: THE "HOOK AND PULL"
-                # If we have already lifted the legs high (<-0.7), but we are still flat...
-                # It means the front wheel is up, but we aren't pulling over.
                 if self.bogie_angle < self.ATTACK_LIMIT:
                     # FORCE LOWER: Press front wheel into the step to pull middle wheel up
                     self.bogie_angle += self.LOWER_SPEED
