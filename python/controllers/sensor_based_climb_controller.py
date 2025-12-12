@@ -21,7 +21,7 @@ def climb_control(model, data):
     to completely eliminate sensor jitter and microbouncing.
     """
     # --- 1. CONFIGURATION ---
-    kp = 5 
+    kp = 1 
     kd = 0.2
     
     # FILTER SETTINGS

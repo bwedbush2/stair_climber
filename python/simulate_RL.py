@@ -118,19 +118,19 @@ def get_scenario_2():
     """, "0 0 0.2"
 
 def get_scenario_3():
-    print("\n--- Generating Scenario 3: Stair Pyramid ---")
+    print("\n--- Generating Scenario 3: Stair Pyramid (Reduced Height) ---")
     return """
     <geom name="floor" type="plane" size="10 10 .1" material="grid"/>
     <body name="stair_pyramid" pos="2 0 0">
-        <geom name="u1" type="box" size="1 1 .05" pos="0 0 0.05" material="concrete"/>
-        <geom name="u2" type="box" size="1 1 .05" pos="0.3 0 0.15" material="concrete"/>
-        <geom name="u3" type="box" size="1 1 .05" pos="0.6 0 0.25" material="concrete"/>
-        <geom name="u4" type="box" size="1 1 .05" pos="0.9 0 0.35" material="concrete"/>
-        <geom name="plat" type="box" size="1 1 .05" pos="1.5 0 0.45" material="concrete"/>
-        <geom name="d1" type="box" size="1 1 .05" pos="2.1 0 0.35" material="concrete"/>
-        <geom name="d2" type="box" size="1 1 .05" pos="2.4 0 0.25" material="concrete"/>
-        <geom name="d3" type="box" size="1 1 .05" pos="2.7 0 0.15" material="concrete"/>
-        <geom name="d4" type="box" size="1 1 .05" pos="3.0 0 0.05" material="concrete"/>
+        <geom name="u1" type="box" size="1 1 .04" pos="0 0 0.04" material="concrete"/>
+        <geom name="u2" type="box" size="1 1 .04" pos="0.3 0 0.12" material="concrete"/>
+        <geom name="u3" type="box" size="1 1 .04" pos="0.6 0 0.20" material="concrete"/>
+        <geom name="u4" type="box" size="1 1 .04" pos="0.9 0 0.28" material="concrete"/>
+        <geom name="plat" type="box" size="1 1 .04" pos="1.5 0 0.36" material="concrete"/>
+        <geom name="d1" type="box" size="1 1 .04" pos="2.1 0 0.28" material="concrete"/>
+        <geom name="d2" type="box" size="1 1 .04" pos="2.4 0 0.20" material="concrete"/>
+        <geom name="d3" type="box" size="1 1 .04" pos="2.7 0 0.12" material="concrete"/>
+        <geom name="d4" type="box" size="1 1 .04" pos="3.0 0 0.04" material="concrete"/>
     </body>
     """, "0 0 0.2"
 
