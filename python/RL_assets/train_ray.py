@@ -16,7 +16,7 @@ def main():
     
     # Load existing model if it exists, otherwise create new
     # if os.path.exists("ray_stairs_policy.zip"):
-    #     print("🔄 Loading existing model to continue training...")
+    #     print("Loading existing model to continue training...")
     #     model = PPO.load("ray_stairs_policy", env=env, device="cpu",
     #                      ent_coef=0.05, learning_rate=3e-4)
     if False: 
