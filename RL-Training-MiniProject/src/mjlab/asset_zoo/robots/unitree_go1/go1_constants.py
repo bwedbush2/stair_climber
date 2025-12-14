@@ -21,7 +21,7 @@ from mjlab.utils.spec_config import CollisionCfg
 
 # TODO: Load the correct "go1.xml" file for your setup.
 GO1_XML: Path = (
-  MJLAB_SRC_PATH / "asset_zoo" / "robots" / "unitree_go1" / ???????
+  MJLAB_SRC_PATH / "asset_zoo" / "robots" / "unitree_go1" / "xmls" / "go1.xml"
 )
 assert GO1_XML.exists(), f"GO1 XML not found at {GO1_XML}"
 
@@ -55,23 +55,24 @@ KNEE_GEAR_RATIO = HIP_GEAR_RATIO * 1.5
 # Students must fill in the missing effort and velocity limits.
 # These come from the real Go1 hardware specs. Refer to the writeup for values.
 #--------------------------------------------------------------------------#
-
+J_HIP = ROTOR_INERTIA * HIP_GEAR_RATIO**2
+J_KNEE = ROTOR_INERTIA * KNEE_GEAR_RATIO**2
 HIP_ACTUATOR = ElectricActuator(
-  reflected_inertia=,   # TODO: calculate armature based on rotor inertia and gear ratios
-  velocity_limit=,      # TODO: Insert max joint velocity (rad/s).
-  effort_limit=,        # TODO: Insert torque limit (Nm).
+  reflected_inertia= J_HIP,    # TODO: calculate armature based on rotor inertia and gear ratios
+  velocity_limit= 30.1,      # TODO: Insert max joint velocity (rad/s).
+  effort_limit= 23.7,        # TODO: Insert torque limit (Nm).
 )
 
 KNEE_ACTUATOR = ElectricActuator(
-  reflected_inertia=,   # TODO: calculate armature based on rotor inertia and gear ratios
-  velocity_limit=,      # TODO: Insert max joint velocity (rad/s).
-  effort_limit=,        # TODO: Insert torque limit (Nm).
+  reflected_inertia=J_KNEE,   # TODO: calculate armature based on rotor inertia and gear ratios
+  velocity_limit= 20.06,      # TODO: Insert max joint velocity (rad/s).
+  effort_limit= 35.55,        # TODO: Insert torque limit (Nm).
 )
 
 # Natural frequency and damping ratio for PD-like actuator behavior.
 # These are typical choices for stable position-control hardware.
-NATURAL_FREQ = ????? * 2.0 * 3.1415926535   # 10 Hz stiffness shaping
-DAMPING_RATIO = ??????                    # Critically damped-ish behavior
+NATURAL_FREQ = 10 * 2.0 * 3.1415926535   # 10 Hz stiffness shaping
+DAMPING_RATIO = 2.0                    # Critically damped-ish behavior
 
 #--------------------------------------------------------------------------#
 # We provide a heuristic formula to compute PD gains as follows,
@@ -79,11 +80,11 @@ DAMPING_RATIO = ??????                    # Critically damped-ish behavior
 # for both hip and knee actuators.
 #--------------------------------------------------------------------------#
 
-STIFFNESS_HIP = ????    
-DAMPING_HIP = ????     
+STIFFNESS_HIP = J_HIP * NATURAL_FREQ**2
+DAMPING_HIP = 2 * DAMPING_RATIO * J_HIP * NATURAL_FREQ     
 
-STIFFNESS_KNEE = ????   
-DAMPING_KNEE = ????     
+STIFFNESS_KNEE = J_KNEE * NATURAL_FREQ**2   
+DAMPING_KNEE = 2 * DAMPING_RATIO * J_KNEE * NATURAL_FREQ       
 
 # Builtin PD position actuators for hip and knee joints.
 GO1_HIP_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
@@ -193,4 +194,4 @@ for a in GO1_ARTICULATION.actuators:
   names = a.joint_names_expr
   assert e is not None
   for n in names:
-    GO1_ACTION_SCALE[n] = ???????
+    GO1_ACTION_SCALE[n] = 0.25 * e/s
