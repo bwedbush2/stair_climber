@@ -123,7 +123,22 @@ def create_velocity_env_cfg(
   # The task is to track a desired linear and yaw velocity (twist).
   # Hint: use a `UniformVelocityCommandCfg`.
   commands: dict[str, CommandTermCfg] = {
-    "twist": UniformVelocityCommandCfg()
+    "twist": UniformVelocityCommandCfg(
+      resampling_time_range = (3.0, 8.0),
+      
+      rel_standing_envs = 0.1,
+      rel_heading_envs = 0.3,
+      
+      heading_command = True,
+      heading_control_stiffness = 1.0,
+
+      ranges=UniformVelocityCommandCfg.Ranges(
+            lin_vel_x=(-1.0, 1.0),
+            lin_vel_y=(-1.0, 1.0),
+            ang_vel_z=(-1.0, 1.0),
+            heading=(-math.pi, math.pi),
+        ),
+    )
   }
 
   # ---------------------------------------------------------------------------
@@ -222,14 +237,20 @@ def create_velocity_env_cfg(
     # Hint: track commanded linear and angular velocity.
 
     "track_linear_velocity": RewardTermCfg(
-      func=,
+      func= mdp.track_linear_velocity,
       weight=2.0,
-      params={},
+      params={
+        "std": 0.5,
+        "command_name": "twist"
+      },
     ),
     "track_angular_velocity": RewardTermCfg(
-      func=,
+      func= mdp.track_angular_velocity,
       weight=2.0,
-      params={},
+      params={
+        "std": 0.5,
+        "command_name": "twist"
+        },
     ),
 
     # -------------------------------------------------------------------------
