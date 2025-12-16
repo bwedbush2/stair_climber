@@ -176,7 +176,7 @@ def create_velocity_env_cfg(
     ),
     "commands": ObservationTermCfg(
         func=mdp.generated_commands,
-        params={"command_name": "base_velocity"},
+        params={"command_name": "twist"},
     )
 
   }
@@ -239,8 +239,8 @@ def create_velocity_env_cfg(
       domain_randomization=True,
       params={
         "asset_cfg": SceneEntityCfg("robot", geom_names=".*"),
-        "field": "friction",
-        "range": (0.3, 1.2),
+        "field": "geom_friction",
+        "ranges": (0.3, 1.2),
       }
     ),
 
@@ -298,6 +298,7 @@ def create_velocity_env_cfg(
       weight=1.0,
       params={
         "std": math.sqrt(0.2),
+        "asset_cfg": SceneEntityCfg("robot", body_names="trunk")
       },
     ),
     "default_joint_pos": RewardTermCfg(
