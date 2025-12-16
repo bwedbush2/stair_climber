@@ -124,6 +124,7 @@ def create_velocity_env_cfg(
   # Hint: use a `UniformVelocityCommandCfg`.
   commands: dict[str, CommandTermCfg] = {
     "twist": UniformVelocityCommandCfg(
+      asset_name="robot",
       resampling_time_range = (3.0, 8.0),
       
       rel_standing_envs = 0.1,
