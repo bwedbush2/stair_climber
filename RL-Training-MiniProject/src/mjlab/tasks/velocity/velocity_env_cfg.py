@@ -239,7 +239,7 @@ def create_velocity_env_cfg(
       domain_randomization=True,
       params={
         "asset_cfg": SceneEntityCfg("robot", geom_names=".*"),
-        "attr": "friction",
+        "field": "friction",
         "range": (0.3, 1.2),
       }
     ),
