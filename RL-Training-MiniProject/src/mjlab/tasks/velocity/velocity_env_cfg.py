@@ -139,6 +139,7 @@ def create_velocity_env_cfg(
             ang_vel_z=(-1.0, 1.0),
             heading=(-math.pi, math.pi),
         ),
+      debug_vis=True,
     )
   }
 
