@@ -153,7 +153,30 @@ def create_velocity_env_cfg(
       func=mdp.joint_pos_rel,
       noise=Unoise(n_min=-0.01, n_max=0.01), # Define sensor noise range
     ),
-    ........... # add more terms here
+    "base_lin_vel": ObservationTermCfg(
+      func=mdp.base_lin_vel,
+      noise=Unoise(n_min=-0.5, n_max=0.5),
+    ),
+    "base_ang_vel": ObservationTermCfg(
+        func=mdp.base_ang_vel,
+        noise=Unoise(n_min=-0.2, n_max=0.2),
+    ),
+    "projected_gravity": ObservationTermCfg(
+        func=mdp.projected_gravity,
+        noise=Unoise(n_min=-0.05, n_max=0.05),
+    ),
+    "joint_vel": ObservationTermCfg(
+        func=mdp.joint_vel_rel,
+        noise=Unoise(n_min=-1.5, n_max=1.5),
+    ),
+    "actions": ObservationTermCfg(
+        func=mdp.last_action,
+    ),
+    "commands": ObservationTermCfg(
+        func=mdp.generated_commands,
+        params={"command_name": "base_velocity"},
+    )
+
   }
 
   critic_terms = {
@@ -169,12 +192,12 @@ def create_velocity_env_cfg(
     "policy": ObservationGroupCfg(
       terms=policy_terms,
       concatenate_terms=True,
-      enable_corruption=??????,
+      enable_corruption= True,
     ),
     "critic": ObservationGroupCfg(
       terms=critic_terms,
       concatenate_terms=True,
-      enable_corruption=?????, 
+      enable_corruption= False, 
     ),
   }
 
@@ -210,19 +233,25 @@ def create_velocity_env_cfg(
     # (1) Randomize the ground friction of the feet using `mdp.randomize_field`.
     "foot_friction": EventTermCfg(
       mode="startup",
-      func=,
+      func=mdp.randomize_field,
       domain_randomization=True,
-      params={},
+      params={
+        "asset_cfg": SceneEntityCfg("robot", geom_names=".*"),
+        "attr": "friction",
+        "range": (0.3, 1.2),
+      }
     ),
 
 
 
     # (2) Add random velocity perturbations to the base to learn recovery behaviorusing `mdp.push_by_setting_velocity`.
     "push_robot": EventTermCfg(
-      func=,
+      func= mdp.push_by_setting_velocity,
       mode="interval",
       interval_range_s=(1.0, 3.0),
-      params={},
+      params={
+        "velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)},
+      }
     ),
   }
 
@@ -263,27 +292,32 @@ def create_velocity_env_cfg(
     # 2. penalizing large deviations from default joint positions
 
     "upright": RewardTermCfg(
-      func=,
+      func=mdp.flat_orientation,
       weight=1.0,
       params={
+        "std": math.sqrt(0.2),
       },
     ),
     "default_joint_pos": RewardTermCfg(
-      func=,
+      func=mdp.joint_deviation_l2,
       weight=-0.1,
       params={
+        "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
       },
     ),
     # To prevent reaching physical limits and encourage smooth actions, consider adding terms such as:
     # 3. penalizing norm of action rate
     # 4. penalizing reaching the joint position limits
     "action_rate": RewardTermCfg(
-      func=, 
-      weight=-0.1
+      func=mdp.action_rate_l2, 
+      weight=-0.1,
     ),
     "dof_pos_limits": RewardTermCfg(
-      func=, 
-      weight=-1.0
+      func=mdp.joint_pos_limits, 
+      weight=-1.0,
+      params={
+         "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
+      },
     ),
     # -------------------------------------------------------------------------
     # Part3 (a) Writing gait terms
@@ -312,9 +346,11 @@ def create_velocity_env_cfg(
       time_out=True,
     ),
     "fell_over": TerminationTermCfg(
-      func=,
+      func= mdp.bad_orientation,
       time_out=False,
-      params={},
+      params={
+        "limit_angle": 60 * math.pi /180
+      },
     ),
   }
 
