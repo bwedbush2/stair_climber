@@ -301,7 +301,7 @@ def create_velocity_env_cfg(
       },
     ),
     "default_joint_pos": RewardTermCfg(
-      func=mdp.joint_deviation_l2,
+      func=mdp.default_joint_position,
       weight=-0.1,
       params={
         "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
