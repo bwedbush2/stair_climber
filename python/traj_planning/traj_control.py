@@ -1,7 +1,7 @@
 import numpy as np
 import mujoco
 from .traj_controllers.traj_pid import traj_pid as pid_control
-#from .traj_controllers.traj_mpc import traj_mpc as mpc_control
+from .traj_controllers.traj_mpc import traj_mpc as mpc_control
 
 from .create_path import create_path
 

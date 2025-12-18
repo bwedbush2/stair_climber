@@ -235,17 +235,25 @@ def traj_mpc(model, data, path) -> tuple[float, float] :
     gam = 1     # drive param
     tau = 0.5   # turn param
 
-    # Constraints:
+    # Initial constraint
     z0 = _get_car_pose(model, data)
 
+    # Terminal condition
     target_idx = data.userdata[1]
     xt, yt, _ = path[target_idx]    # target waypoint
-    # NEXT target waypoint
-    xt_next, yt_next, _ = path[target_idx + 1] if target_idx < len(path) else [xt,yt,0]
-    #yawt = 
-    zf=[xt,yt,np.pi/4]
+    xt_next, yt_next, _ = path[target_idx + 1] if target_idx < len(path) else [xt,yt,0]     # NEXT target waypoint
+    yaw_des = np.arctan2(yt_next - yt,
+                        xt_next - xt)
+    zf = [xt,yt,yaw_des]
+    Af = []
 
-    feas, xOpt, uOpt, JOpt = _solve_cftoc_disc(gam, tau, N, z0, xL, xU, uL, uU, bf, Af)
+    # Boundaries
+    xL = [-1000, -1000, -np.pi]
+    xU = [1000, 1000, np.pi]
+    uL = [-0.5, -1]     # 0.5 to limit linear speed
+    uU = [0.5, 1]
+
+    feas, xOpt, uOpt, JOpt = _solve_cftoc_disc(gam, tau, Ts, N, z0, xL, xU, uL, uU, zf, Af)
     
     u1, u2 = uOpt[:,0]
 
