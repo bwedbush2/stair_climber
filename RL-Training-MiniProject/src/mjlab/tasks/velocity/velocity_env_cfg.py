@@ -189,34 +189,26 @@ def create_velocity_env_cfg(
     # TODO(b): add extra observations for the critic here.
     # Hint: Consider gait information such as foot contact, air time, or height.
     "feet_height": ObservationTermCfg(
-        func=mdp.feet_height,
+        func=mdp.foot_height,
         params={
-            # Use site_names to measure the actual foot bottom, not the leg link
             "asset_cfg": SceneEntityCfg("robot", body_names=site_names),
         },
     ),
 
-    # 2. Foot Air Time [cite: 171]
-    # "Measures how long each foot has been off the ground."
     "feet_air_time": ObservationTermCfg(
-        func=mdp.feet_air_time,
+        func=mdp.foot_air_time,
         params={
-            # Needs the sensor to know if we are currently touching the ground
             "sensor_cfg": feet_sensor_cfg,
         },
     ),
 
-    # 3. Foot Contact State/Force [cite: 173]
-    # "Indicates whether each foot is currently touching the ground."
     "feet_contact": ObservationTermCfg(
-        func=mdp.feet_contact_forces,
+        func=mdp.foot_contact_forces,
         params={
             "sensor_cfg": feet_sensor_cfg,
-            # We usually clamp/scale forces or just return the norm
-            # Default behavior of feet_contact_forces is usually sufficient
         },
     ),
-    
+
   }
 
   observations = {
@@ -368,7 +360,7 @@ def create_velocity_env_cfg(
     # 3. foot_slip with mdp.feet_slip
 
 "foot_clearance": RewardTermCfg(
-      func=mdp.feet_clearance,
+      func=mdp.foot_clearance,
       weight=-2.0,  
       params={
         "target_height": 0.1,                                         
@@ -378,7 +370,7 @@ def create_velocity_env_cfg(
     ),
 
     "foot_swing_height": RewardTermCfg(
-      func=mdp.feet_swing_height,
+      func=mdp.foot_swing_height,
       weight=-0.25,  
       params={
         "target_height": 0.1,            
@@ -388,7 +380,7 @@ def create_velocity_env_cfg(
         "asset_cfg": SceneEntityCfg("robot", body_names=site_names),
       },
     ),
-    "foot_slip": RewardTermCfg(
+    "foott_slip": RewardTermCfg(
       func=mdp.feet_slip,
       weight=-0.1,   # 
       params={
