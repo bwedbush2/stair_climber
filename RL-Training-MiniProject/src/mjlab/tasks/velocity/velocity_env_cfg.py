@@ -360,7 +360,7 @@ def create_velocity_env_cfg(
     # 3. foot_slip with mdp.feet_slip
 
 "foot_clearance": RewardTermCfg(
-      func=mdp.foot_clearance,
+      func=mdp.feet_clearance,
       weight=-2.0,  
       params={
         "target_height": 0.1,                                         
@@ -380,7 +380,7 @@ def create_velocity_env_cfg(
         "asset_cfg": SceneEntityCfg("robot", body_names=site_names),
       },
     ),
-    "foott_slip": RewardTermCfg(
+    "foot_slip": RewardTermCfg(
       func=mdp.feet_slip,
       weight=-0.1,   # 
       params={
