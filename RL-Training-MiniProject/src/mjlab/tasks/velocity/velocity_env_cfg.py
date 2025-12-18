@@ -335,6 +335,33 @@ def create_velocity_env_cfg(
     # 1. foot_clearance with mdp.feet_clearance
     # 2. foot_swing_height with mdp.feet_swing_height
     # 3. foot_slip with mdp.feet_slip
+
+    "foot_reward": RewardTermCfg(
+      func= mdp.track_linear_velocity,
+      weight=2.0,
+      params={
+        "std": 0.5,
+        "command_name": "twist"
+      },
+    ),
+    "foot_swing_height": RewardTermCfg(
+      func= mdp.track_angular_velocity,
+      weight=2.0,
+      params={
+        "std": 0.5,
+        "command_name": "twist"
+        },
+    ),
+    "foot_slip": RewardTermCfg(
+      func= mdp.track_angular_velocity,
+      weight=2.0,
+      params={
+        "std": 0.5,
+        "command_name": "twist"
+        },
+    ),
+    
+    
   }
 
   # ---------------------------------------------------------------------------
