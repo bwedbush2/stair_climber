@@ -21,7 +21,7 @@ def get_data(tag):
         print(f"Warning: Tag '{tag}' not found.")
         return [], []
 
-file_path = PRB1_PATH
+file_path = PRB2_PATH
 
 # 1. Load the data
 print(f"Loading {file_path}...")

@@ -9,7 +9,7 @@ from typing import Literal
 import torch
 import tyro
 import numpy as np
-#import matplotlib.pyplot as plt  # Added for plotting
+import matplotlib.pyplot as plt  # Added for plotting
 from rsl_rl.runners import OnPolicyRunner
 
 from mjlab.envs import ManagerBasedRlEnv, ManagerBasedRlEnvCfg
@@ -129,42 +129,42 @@ def run_play(task: str, cfg: PlayConfig):
 
   env.close()
 
-  # # =========================================================================
-  # # PLOTTING
-  # # =========================================================================
-  # print("[INFO] Generating Plots...")
-  # fig, axs = plt.subplots(3, 1, figsize=(10, 12))
-  # time_axis = np.arange(len(logs["cmd_x"]))
+  # =========================================================================
+  # PLOTTING
+  # =========================================================================
+  print("[INFO] Generating Plots...")
+  fig, axs = plt.subplots(3, 1, figsize=(10, 12))
+  time_axis = np.arange(len(logs["cmd_x"]))
 
-  # # Plot X
-  # axs[0].plot(time_axis, logs["cmd_x"], 'r--', label="Command X")
-  # axs[0].plot(time_axis, logs["vel_x"], 'b-', label="Actual X")
-  # axs[0].set_title("Forward Velocity Tracking")
-  # axs[0].set_ylabel("Velocity (m/s)")
-  # axs[0].legend()
-  # axs[0].grid(True)
+  # Plot X
+  axs[0].plot(time_axis, logs["cmd_x"], 'r--', label="Command X")
+  axs[0].plot(time_axis, logs["vel_x"], 'b-', label="Actual X")
+  axs[0].set_title("Forward Velocity Tracking")
+  axs[0].set_ylabel("Velocity (m/s)")
+  axs[0].legend()
+  axs[0].grid(True)
 
-  # # Plot Y
-  # axs[1].plot(time_axis, logs["cmd_y"], 'r--', label="Command Y")
-  # axs[1].plot(time_axis, logs["vel_y"], 'b-', label="Actual Y")
-  # axs[1].set_title("Lateral Velocity Tracking")
-  # axs[1].set_ylabel("Velocity (m/s)")
-  # axs[1].grid(True)
+  # Plot Y
+  axs[1].plot(time_axis, logs["cmd_y"], 'r--', label="Command Y")
+  axs[1].plot(time_axis, logs["vel_y"], 'b-', label="Actual Y")
+  axs[1].set_title("Lateral Velocity Tracking")
+  axs[1].set_ylabel("Velocity (m/s)")
+  axs[1].grid(True)
 
-  # # Plot Yaw
-  # axs[2].plot(time_axis, logs["cmd_yaw"], 'r--', label="Command Yaw")
-  # axs[2].plot(time_axis, logs["vel_yaw"], 'b-', label="Actual Yaw")
-  # axs[2].set_title("Yaw Rate Tracking")
-  # axs[2].set_ylabel("Rate (rad/s)")
-  # axs[2].set_xlabel("Steps")
-  # axs[2].grid(True)
+  # Plot Yaw
+  axs[2].plot(time_axis, logs["cmd_yaw"], 'r--', label="Command Yaw")
+  axs[2].plot(time_axis, logs["vel_yaw"], 'b-', label="Actual Yaw")
+  axs[2].set_title("Yaw Rate Tracking")
+  axs[2].set_ylabel("Rate (rad/s)")
+  axs[2].set_xlabel("Steps")
+  axs[2].grid(True)
 
-  # plt.tight_layout()
-  # output_file = "deliverable_1_4_plots.png"
-  # plt.savefig(output_file)
-  # print(f"✅ Plots saved to {output_file}")
-  # print("You can also view them in the output above if running in a notebook.")
-  # plt.show()
+  plt.tight_layout()
+  output_file = "deliverable_1_4_plots.png"
+  plt.savefig(output_file)
+  print(f"✅ Plots saved to {output_file}")
+  print("You can also view them in the output above if running in a notebook.")
+  plt.show()
 
 def main():
   import mjlab.tasks  # noqa: F401
