@@ -40,7 +40,7 @@ def _get_car_pose(model, data, body_name="car"):
 
     return x, y, yaw
 
-def _interpolate_path(path) :
+def _interpolate_path(path, n= 2) :
     '''
     Interpolates a given path with n extra points between each waypoint
     
@@ -54,7 +54,6 @@ def _interpolate_path(path) :
     segments = []
     for (x0, y0, z0), (x1, y1, z1) in zip(waypoints[:-1], waypoints[1:]):
         #n = round(np.sqrt((x1-x0)**2 + (y1-y0)**2) / 2) + 2            # interpolate based on distance b/t points
-        n = 2                                                           # for now just return same points
         xs = np.linspace(x0, x1, n)
         ys = np.linspace(y0, y1, n)
         zs = np.linspace(z0, z1, n)
@@ -98,7 +97,7 @@ def _init_if_needed(model, data, scene) :
                 f"got shape {path.shape}"
             )
 
-        path_interp = _interpolate_path(path)
+        path_interp = _interpolate_path(path, 3)
         _PATH_CACHE = path_interp
 
         # Initialize userdata state
