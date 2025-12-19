@@ -4,6 +4,7 @@ import pyomo.environ as pyo
 from pyomo.opt import SolverStatus, TerminationCondition
 import mujoco
 
+_MPC_WARM = {"x": None, "u": None}
 
 def _solve_cftoc_disc(gam, tau, Ts, N, x0, xL, xU, uL, uU, bf, Af):
 
@@ -42,7 +43,8 @@ def _solve_cftoc_disc(gam, tau, Ts, N, x0, xL, xU, uL, uU, bf, Af):
     model.shortest_time_cost  = sum((model.x[1, t]-bf[1])**2 for t in model.tidx if t < N)
     model.turning_cost = sum(w_w * (model.u[1, t]**2) for t in model.tidu)
     model.speed_cost   = sum(w_v * (model.u[0, t]**2) for t in model.tidu)
-    model.cost = pyo.Objective(expr = model.track_cost + model.terminal_cost, sense=pyo.minimize)
+    total_cost = model.track_cost + model.terminal_cost + model.speed_cost + model.turning_cost
+    model.cost = pyo.Objective(expr = total_cost, sense=pyo.minimize)
 
     # # Initial condition
     # model.constraint1 = pyo.Constraint(model.xidx, rule=lambda model, i: model.x[i, 0] == z0[i])
@@ -103,20 +105,36 @@ def _solve_cftoc_disc(gam, tau, Ts, N, x0, xL, xU, uL, uU, bf, Af):
     # model.constraint9 = pyo.Constraint(model.xidx, rule=lambda model, i: model.x[i, N] == bf[i])
 
     # Initial guess to make solver run faster for nonlinear dynamics
-    for t in model.tidx:
-        model.x[0,t].set_value(x0[0])
-        model.x[1,t].set_value(x0[1])
-        model.x[2,t].set_value(x0[2])
-    for t in model.tidu:
-        model.u[0,t].set_value(0.0)
-        model.u[1,t].set_value(0.0)
-    
+    # for t in model.tidx:
+    #     model.x[0,t].set_value(x0[0])
+    #     model.x[1,t].set_value(x0[1])
+    #     model.x[2,t].set_value(x0[2])
+    # for t in model.tidu:
+    #     model.u[0,t].set_value(0.0)
+    #     model.u[1,t].set_value(0.0)
+    if _MPC_WARM["x"] is not None:
+        for i in model.nx:
+            for t in model.tidx:
+                model.x[i,t].set_value(float(_MPC_WARM["x"][i, min(t+1, N)]))
+    if _MPC_WARM["u"] is not None:
+        for i in model.nu:
+            for t in model.tidu:
+                model.u[i,t].set_value(float(_MPC_WARM["u"][i, min(t+1, N-1)]))
+
    
     # Now we can solve:
     solver = pyo.SolverFactory('ipopt')
     # Solver options
-    solver.options["max_iter"] = 2000
+    solver.options["max_iter"] = 1000
     solver.options["tol"] = 1e-6
+    solver.options["warm_start_init_point"] = "yes"
+    # solver.options["print_level"] = 0
+    # solver.options["max_iter"] = 60                  # 30–100 is typical for MPC
+    # solver.options["tol"] = 1e-3                     # loosen
+    # solver.options["acceptable_tol"] = 1e-2          # accept “good enough”
+    # solver.options["acceptable_iter"] = 5
+    # solver.options["max_cpu_time"] = 0.5            # seconds (match your dt_drive)
+
     results = solver.solve(model)
 
     # u1 = [pyo.value(model.u[0,0])]
@@ -203,14 +221,15 @@ def traj_mpc(model, data, path, dt=0.05) -> tuple[float, float] :
     # Simulation params
     # STILL NEED TO FIGURE OUT OUT TO SIMULATE OVER A REDUCED HORIZON SIZE (NOT EVERY .001S)
     # AND HOW TO CONVERT DISTANCE TO TIME
-    Ts = dt                 # time step - every time the controller is called
+    #Ts = dt                 # time step - every time the controller is called
+    Ts = 0.2
     N = 10                  # Horizon
-    TFinal = 1              # picked to be 1 second. Increase if myopic. Decrease if computation is slow
+    TFinal = Ts*N           # picked to be 1 second. Increase if myopic. Decrease if computation is slow
 
 
     # Model params
     gam = 1     # drive param
-    tau = 0.5   # turn param
+    tau = 1     # turn param
 
     # Initial constraint
     z0 = _get_car_pose(model, data)
@@ -218,7 +237,7 @@ def traj_mpc(model, data, path, dt=0.05) -> tuple[float, float] :
     # Terminal condition
     target_idx = int(data.userdata[1])
     xt, yt, _ = path[target_idx]    # target waypoint
-    xt_next, yt_next, _ = path[target_idx + 1] if target_idx < len(path) else [xt,yt,0]     # NEXT target waypoint
+    xt_next, yt_next, _ = path[target_idx + 1] if target_idx < len(path)-1 else [xt,yt,0]     # NEXT target waypoint
     yaw_des = np.arctan2(yt_next - yt,
                         xt_next - xt)
     zf = [xt,yt,yaw_des]
@@ -230,10 +249,15 @@ def traj_mpc(model, data, path, dt=0.05) -> tuple[float, float] :
     uL = [0, -1]     # 0.5 to limit linear speed
     uU = [0.5, 1]
 
+    print("optimization time start = ", data.time)
     feas, xOpt, uOpt, JOpt = _solve_cftoc_disc(gam, tau, Ts, N, z0, xL, xU, uL, uU, zf, Af)
     print("feasibilty = ", feas)
     print("optimal states = ", xOpt)
     print("optimal inputs = ", uOpt)
+    # after you solve and extract xOpt, uOpt:
+    _MPC_WARM["x"] = xOpt
+    _MPC_WARM["u"] = uOpt
+
     
     u1, u2 = uOpt[:,0]
 
