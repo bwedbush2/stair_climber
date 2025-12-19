@@ -26,6 +26,8 @@ except ImportError:
 
 
 USE_TRAJECTORY_CONTROL = True
+TRAJECTORY_CONTROL_TYPE = 0
+NEXT_DRIVE_CONTROL_TIME = 0
 USE_CLIMB_CONTROL = True
 USE_RL_FOR_CLIMB = False 
 
@@ -406,6 +408,7 @@ rl_filtered_action = 0.0
 
 def controller(model, data, scene, rl_agent=None):
     global rl_filtered_action
+    global NEXT_DRIVE_CONTROL_TIME
 
     id_drive = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_forward")
     id_turn = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_turn")
@@ -413,13 +416,14 @@ def controller(model, data, scene, rl_agent=None):
     id_level = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "level_bin")
 
     drive_cmd, turn_cmd = 0.0, 0.0
-    if USE_TRAJECTORY_CONTROL:
-        drive_cmd, turn_cmd = current_traj_control(model, data, scene)
+    dt_drive = 0.2
+    if USE_TRAJECTORY_CONTROL and data.time >= NEXT_DRIVE_CONTROL_TIME:
+        drive_cmd, turn_cmd = current_traj_control(model, data, scene, dt_drive, TRAJECTORY_CONTROL_TYPE)
         data.ctrl[id_drive] = drive_cmd
-        data.ctrl[id_turn] = turn_cmd  
-
+        data.ctrl[id_turn] = turn_cmd
+        NEXT_DRIVE_CONTROL_TIME += dt_drive
+    
     climb_cmd = 0.0
-
     if USE_CLIMB_CONTROL and rl_agent is not None:
         obs = get_rl_observation(model, data)
 
@@ -565,6 +569,17 @@ if __name__ == "__main__":
         USE_TRAJECTORY_CONTROL = False
     else:
         USE_TRAJECTORY_CONTROL = True
+        control_type = int(input("Enter 1 for PID or 2 for MPC control: "))
+        if control_type == 1 or control_type == 2:
+            TRAJECTORY_CONTROL_TYPE = control_type
+            if control_type == 1:
+                print("Using PID")
+            else:
+                print("Using MPC")
+        else:
+            print("NOT A VALID INPUT > DEFAULTING TO PID")
+            TRAJECTORY_CONTROL_TYPE = 1
+
 
     if input("Enable Climb Control? (y/n): ").lower() == 'n':
         USE_CLIMB_CONTROL = False

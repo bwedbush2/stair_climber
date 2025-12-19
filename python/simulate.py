@@ -27,6 +27,7 @@ except ImportError:
 # GLOBAL SETTINGS
 # These flags will be set by the user input at runtime
 USE_TRAJECTORY_CONTROL = True
+NEXT_DRIVE_CONTROL_TIME = 0
 USE_CLIMB_CONTROL = True
 
 
@@ -363,16 +364,20 @@ def get_body_pitch(model, data, body_name):
     return pitch
 
 def controller(model, data, scene):
+    global NEXT_DRIVE_CONTROL_TIME
+
     id_drive = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_forward")
     id_turn = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_turn")
     id_climb = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "actuator_climb")
     id_level = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "level_bin")
 
     # Drive & Turn
-    if USE_TRAJECTORY_CONTROL:
-        drive, turn = current_traj_control(model, data, scene)
+    dt_drive = 0.2
+    if USE_TRAJECTORY_CONTROL and data.time >= NEXT_DRIVE_CONTROL_TIME:
+        drive, turn = current_traj_control(model, data, scene, dt_drive, TRAJECTORY_CONTROL_TYPE)
         data.ctrl[id_drive] = drive
         data.ctrl[id_turn] = turn
+        NEXT_DRIVE_CONTROL_TIME += dt_drive
 
     # Climb Control
     if USE_CLIMB_CONTROL:
@@ -493,6 +498,16 @@ if __name__ == "__main__":
         user_in = input("Enable Trajectory Control? (y/n): ").strip().lower()
         if user_in == 'y':
             USE_TRAJECTORY_CONTROL = True
+            control_type = int(input("Enter 1 for PID or 2 for MPC control: "))
+            if control_type == 1 or control_type == 2:
+                TRAJECTORY_CONTROL_TYPE = control_type
+                if control_type == 1:
+                    print("Using PID")
+                else:
+                    print("Using MPC")
+            else:
+                print("NOT A VALID INPUT > DEFAULTING TO PID")
+                TRAJECTORY_CONTROL_TYPE = 1
             valid_traj = True
         elif user_in == 'n':
             USE_TRAJECTORY_CONTROL = False

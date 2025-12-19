@@ -107,7 +107,7 @@ def _init_if_needed(model, data, scene) :
 
 
 # Main controller: follow trajectory in _PATH_CACHE using userdata state
-def traj_control(model, data, scene, time=None):
+def traj_control(model, data, scene, dt=0.5, CONTROL_FLAG= 1):
     """
     Trajectory-following controller. Modularity with either PID or
     MPC controller
@@ -156,7 +156,7 @@ def traj_control(model, data, scene, time=None):
     if dist < _WAYPOINT_TOL:
         print(f"Waypoint {wp_idx} reached")
         wp_idx += 1
-        data.userdata[USERDATA_WP_INDEX] = float(wp_idx)
+        data.userdata[USERDATA_WP_INDEX] = int(wp_idx)
 
         if wp_idx >= _PATH_CACHE.shape[0]:
             # Done with all waypoints
@@ -168,8 +168,13 @@ def traj_control(model, data, scene, time=None):
         dy = ty - y
         dist = np.hypot(dx, dy)
 
-    v_cmd, w_cmd = pid_control(dx, dy, yaw)
-    # v_cmd, w_cmd = mpc_control(model, data)
+    if CONTROL_FLAG == 1:
+        v_cmd, w_cmd = pid_control(dx, dy, yaw)
+    elif CONTROL_FLAG == 2:
+        v_cmd, w_cmd = mpc_control(model, data, _PATH_CACHE, dt)
+    else:
+        raise RuntimeError("TRAJECTORY CONTROL TYPE NOT DEFINED CORRECTLY")
+        
 
     # Map to actuators and clip
     forward_ctrl = np.clip(v_cmd, -_MAX_DRV, _MAX_DRV)

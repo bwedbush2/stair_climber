@@ -4,46 +4,6 @@ import pyomo.environ as pyo
 from pyomo.opt import SolverStatus, TerminationCondition
 import mujoco
 
-def _solve_cftoc(A, B, P, Q, R, N, x0, xL, xU, uL, uU, bf, Af):
-
-    # Initialize model
-    model = pyo.ConcreteModel()
-    nx = np.size(x0)
-    nu = np.size(uU)
-    model.tidx = pyo.Set(initialize=range(0, N+1))
-    model.tidu = pyo.Set(initialize=range(0, N))
-    model.nx = pyo.Set(initialize=range(0, nx))
-    model.nu = pyo.Set(initialize=range(0, nu))
-
-    # Create state and input variables trajectory:
-    model.x = pyo.Var(model.nx, model.tidx) # x is the state vector
-    model.u = pyo.Var(model.nu, model.tidu) # u is the input vector
-
-    # Cost function
-    model.P = P
-    model.Q = Q
-    model.R = R
-    terminal_cost = sum(
-        model.x[i, N] * model.P[i, j] * model.x[j, N]
-        for i in model.nx
-        for j in model.nx
-    )
-    state_cost = sum(
-        model.x[i, t] * model.Q[i, j] * model.x[j, t]
-        for t in model.tidu
-        for i in model.nx
-        for j in model.nx
-    )
-    control_cost = sum(
-        model.u[i, t] * model.R[i, j] * model.u[j, t]
-        for t in model.tidu
-        for i in model.nu
-        for j in model.nu
-    )
-    model.cost = pyo.Objective(
-        expr=terminal_cost + state_cost + control_cost,
-        sense=pyo.minimize
-    )
 
 def _solve_cftoc_disc(gam, tau, Ts, N, x0, xL, xU, uL, uU, bf, Af):
 
@@ -62,10 +22,27 @@ def _solve_cftoc_disc(gam, tau, Ts, N, x0, xL, xU, uL, uU, bf, Af):
 
 
     # Objective:
+    w_xy  = 20.0
+    w_yaw = 5.0
+    w_v   = 0.2
+    w_w   = 0.5
+
+    w_xy_T  = 200.0
+    w_yaw_T = 50.0
+
+    model.track_cost = sum(
+        w_xy * ((model.x[0, t] - bf[0])**2 + (model.x[1, t] - bf[1])**2)
+    + w_yaw * (1 - pyo.cos(model.x[2, t] - bf[2]))
+        for t in model.tidu
+    )
+    model.terminal_cost = (
+        w_xy_T * ((model.x[0, N] - bf[0])**2 + (model.x[1, N] - bf[1])**2)
+    + w_yaw_T * (1 - pyo.cos(model.x[2, N] - bf[2]))
+    )
     model.shortest_time_cost  = sum((model.x[1, t]-bf[1])**2 for t in model.tidx if t < N)
-    model.turning_cost = sum((model.u[1, t])**2 for t in model.tidx if t < N)
-    model.speed_cost = sum((model.u[0, t])**2 for t in model.tidx if t < N)
-    model.cost = pyo.Objective(expr = model.turning_cost, sense=pyo.minimize)
+    model.turning_cost = sum(w_w * (model.u[1, t]**2) for t in model.tidu)
+    model.speed_cost   = sum(w_v * (model.u[0, t]**2) for t in model.tidu)
+    model.cost = pyo.Objective(expr = model.track_cost + model.terminal_cost, sense=pyo.minimize)
 
     # # Initial condition
     # model.constraint1 = pyo.Constraint(model.xidx, rule=lambda model, i: model.x[i, 0] == z0[i])
@@ -111,13 +88,12 @@ def _solve_cftoc_disc(gam, tau, Ts, N, x0, xL, xU, uL, uU, bf, Af):
     
     # Terminal constraint
     Af_list = Af.tolist() if hasattr(Af, "tolist") else Af
-    if len(Af_list) != 0:   # set this from Af.shape or len(Af_list)
+    if len(Af_list) == 0:   # set this from Af.shape or len(Af_list)
         model.xf_con = pyo.Constraint(model.nx, rule=lambda m,i: m.x[i,N] == bf[i])
     else:
-        ncon = Af.shape[0]
+        ncon = len(Af_list)
         model.nxf = pyo.RangeSet(0, ncon-1)
-        Af_list = Af.tolist()
-        bf_list = bf.tolist()
+        bf_list = bf.tolist() if hasattr(bf, "tolist") else bf
         model.xf_con = pyo.Constraint(
             model.nxf,
             rule=lambda m, r: sum(Af_list[r][j]*m.x[j, N] for j in m.nx) <= bf_list[r]
@@ -213,7 +189,7 @@ def _get_car_pose(model, data, body_name="car"):
 
     return [x, y, yaw]
 
-def traj_mpc(model, data, path) -> tuple[float, float] :
+def traj_mpc(model, data, path, dt=0.05) -> tuple[float, float] :
     '''
     This is a controller that uses MPC to optimize trajector control
     given desired waypoints
@@ -227,9 +203,10 @@ def traj_mpc(model, data, path) -> tuple[float, float] :
     # Simulation params
     # STILL NEED TO FIGURE OUT OUT TO SIMULATE OVER A REDUCED HORIZON SIZE (NOT EVERY .001S)
     # AND HOW TO CONVERT DISTANCE TO TIME
-    Ts = model.opt.timestep     # time step for simulation model
-    TFinal = 1                  # picked to be 1 second. Increase if myopic. Decrease if computation is slow
-    N = TFinal / Ts             # Horizon
+    Ts = dt                 # time step - every time the controller is called
+    N = 10                  # Horizon
+    TFinal = 1              # picked to be 1 second. Increase if myopic. Decrease if computation is slow
+
 
     # Model params
     gam = 1     # drive param
@@ -239,7 +216,7 @@ def traj_mpc(model, data, path) -> tuple[float, float] :
     z0 = _get_car_pose(model, data)
 
     # Terminal condition
-    target_idx = data.userdata[1]
+    target_idx = int(data.userdata[1])
     xt, yt, _ = path[target_idx]    # target waypoint
     xt_next, yt_next, _ = path[target_idx + 1] if target_idx < len(path) else [xt,yt,0]     # NEXT target waypoint
     yaw_des = np.arctan2(yt_next - yt,
@@ -250,10 +227,13 @@ def traj_mpc(model, data, path) -> tuple[float, float] :
     # Boundaries
     xL = [-1000, -1000, -np.pi]
     xU = [1000, 1000, np.pi]
-    uL = [-0.5, -1]     # 0.5 to limit linear speed
+    uL = [0, -1]     # 0.5 to limit linear speed
     uU = [0.5, 1]
 
     feas, xOpt, uOpt, JOpt = _solve_cftoc_disc(gam, tau, Ts, N, z0, xL, xU, uL, uU, zf, Af)
+    print("feasibilty = ", feas)
+    print("optimal states = ", xOpt)
+    print("optimal inputs = ", uOpt)
     
     u1, u2 = uOpt[:,0]
 
