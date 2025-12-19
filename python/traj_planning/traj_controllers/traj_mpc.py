@@ -6,7 +6,7 @@ import mujoco
 
 _MPC_WARM = {"x": None, "u": None}
 
-def _solve_cftoc_disc(gam, tau, Ts, N, x0, xL, xU, uL, uU, bf, Af):
+def _solve_cftoc_disc(gam, tau, Ts, N, x0, xN, xL, xU, uL, uU, bf, Af):
 
     # Initialize model
     model = pyo.ConcreteModel()
@@ -37,8 +37,8 @@ def _solve_cftoc_disc(gam, tau, Ts, N, x0, xL, xU, uL, uU, bf, Af):
         for t in model.tidu
     )
     model.terminal_cost = (
-        w_xy_T * ((model.x[0, N] - bf[0])**2 + (model.x[1, N] - bf[1])**2)
-    + w_yaw_T * (1 - pyo.cos(model.x[2, N] - bf[2]))
+        w_xy_T * ((model.x[0, N] - xN[0])**2 + (model.x[1, N] - xN[1])**2)
+    + w_yaw_T * (1 - pyo.cos(model.x[2, N] - xN[2]))
     )
     model.shortest_time_cost  = sum((model.x[1, t]-bf[1])**2 for t in model.tidx if t < N)
     model.turning_cost = sum(w_w * (model.u[1, t]**2) for t in model.tidu)
@@ -240,8 +240,34 @@ def traj_mpc(model, data, path, dt=0.05) -> tuple[float, float] :
     xt_next, yt_next, _ = path[target_idx + 1] if target_idx < len(path)-1 else [xt,yt,0]     # NEXT target waypoint
     yaw_des = np.arctan2(yt_next - yt,
                         xt_next - xt)
-    zf = [xt,yt,yaw_des]
-    Af = []
+    
+    zf = np.array([xt, yt, yaw_des], dtype=float)
+
+    # Terminal constraint box half-widths
+    eps_xy  = 0.1   # meters
+    eps_yaw = 0.1   # radians
+
+    # Af * x_N <= bf encodes:
+    #  x <= xt+eps_xy,  -x <= -xt+eps_xy
+    #  y <= yt+eps_xy,  -y <= -yt+eps_xy
+    #  yaw <= yaw_des+eps_yaw,  -yaw <= -yaw_des+eps_yaw
+    Af = np.array([
+        [ 1.0, 0.0, 0.0],
+        [-1.0, 0.0, 0.0],
+        [ 0.0, 1.0, 0.0],
+        [ 0.0,-1.0, 0.0],
+        [ 0.0, 0.0, 1.0],
+        [ 0.0, 0.0,-1.0],
+    ], dtype=float)
+
+    bf = np.array([
+        xt + eps_xy,
+    -xt + eps_xy,
+        yt + eps_xy,
+    -yt + eps_xy,
+        yaw_des + eps_yaw,
+    -yaw_des + eps_yaw,
+    ], dtype=float)
 
     # Boundaries
     xL = [-1000, -1000, -np.pi]
@@ -250,7 +276,7 @@ def traj_mpc(model, data, path, dt=0.05) -> tuple[float, float] :
     uU = [0.5, 1]
 
     print("optimization time start = ", data.time)
-    feas, xOpt, uOpt, JOpt = _solve_cftoc_disc(gam, tau, Ts, N, z0, xL, xU, uL, uU, zf, Af)
+    feas, xOpt, uOpt, JOpt = _solve_cftoc_disc(gam, tau, Ts, N, z0, zf, xL, xU, uL, uU, bf, Af)
     print("feasibilty = ", feas)
     print("optimal states = ", xOpt)
     print("optimal inputs = ", uOpt)
