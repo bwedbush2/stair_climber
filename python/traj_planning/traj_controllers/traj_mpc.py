@@ -87,16 +87,17 @@ def _solve_cftoc_lin(gam, tau, Ts, N, x0, xN, xL, xU, uL, uU, bf, Af,
     w_xy_T  = 200.0
     w_yaw_T = 50.0
 
+    # desired stage yaw based on current position
+    yaw_desired = np.arctan2(xN[1]-x0[1], xN[0]-x0[0])
     model.track_cost = sum(
-        w_xy * ((model.x[0, t] - bf[0])**2 + (model.x[1, t] - bf[1])**2)
-        + w_yaw * (1 - pyo.cos(model.x[2, t] - bf[2]))
+        w_xy * ((model.x[0, t] - xN[0])**2 + (model.x[1, t] - xN[1])**2)
+        + w_yaw * (1 - pyo.cos(model.x[2, t] - yaw_desired))
         for t in model.tidu
     )
     model.terminal_cost = (
         w_xy_T * ((model.x[0, N] - xN[0])**2 + (model.x[1, N] - xN[1])**2)
         + w_yaw_T * (1 - pyo.cos(model.x[2, N] - xN[2]))
     )
-    model.shortest_time_cost  = sum((model.x[1, t]-bf[1])**2 for t in model.tidx if t < N)
     model.turning_cost = sum(w_w * (model.u[1, t]**2) for t in model.tidu)
     model.speed_cost   = sum(w_v * (model.u[0, t]**2) for t in model.tidu)
 
@@ -223,6 +224,7 @@ def _solve_cftoc_lin(gam, tau, Ts, N, x0, xN, xL, xU, uL, uU, bf, Af,
     for i in model.nx:
         for t in model.tidx:
             model.x[i, t].set_value(float(xbar[i, t]))
+        model.x[i, 0].set_value(float(x0[i]))
     for i in model.nu:
         for t in model.tidu:
             model.u[i, t].set_value(float(ubar[i, t]))
@@ -238,12 +240,6 @@ def _solve_cftoc_lin(gam, tau, Ts, N, x0, xN, xL, xU, uL, uU, bf, Af,
     print("IPOPT status:", results.solver.status)
     print("IPOPT term:", results.solver.termination_condition)
 
-    if results.solver.termination_condition not in (
-        TerminationCondition.optimal,
-        TerminationCondition.feasible
-    ):
-        _report_constraint_violations(model, top_k=15, tol=1e-6)
-
     feas = (
         results.solver.status == SolverStatus.ok and
         results.solver.termination_condition in (
@@ -251,6 +247,9 @@ def _solve_cftoc_lin(gam, tau, Ts, N, x0, xN, xL, xU, uL, uU, bf, Af,
             TerminationCondition.feasible
         )
     )
+
+    if not feas:
+        _report_constraint_violations(model, top_k=15, tol=1e-6)
 
     xOpt = np.zeros((nx, N+1))
     for i in model.nx:
@@ -266,7 +265,7 @@ def _solve_cftoc_lin(gam, tau, Ts, N, x0, xN, xL, xU, uL, uU, bf, Af,
     return [feas, xOpt, uOpt, JOpt]
 
 
-def _solve_cftoc_disc(gam, tau, Ts, N, x0, xN, xL, xU, uL, uU, bf, Af):
+def _solve_cftoc_disc(gam, tau, Ts, N, x0, xN, xL, xU, uL, uU, bf, Af, xbar, ubar):
 
     # Initialize model
     model = pyo.ConcreteModel()
@@ -292,15 +291,14 @@ def _solve_cftoc_disc(gam, tau, Ts, N, x0, xN, xL, xU, uL, uU, bf, Af):
     w_yaw_T = 50.0
 
     model.track_cost = sum(
-        w_xy * ((model.x[0, t] - bf[0])**2 + (model.x[1, t] - bf[1])**2)
-        + w_yaw * (1 - pyo.cos(model.x[2, t] - bf[2]))
+        w_xy * ((model.x[0, t] - xN[0])**2 + (model.x[1, t] - xN[1])**2)
+        + w_yaw * (1 - pyo.cos(model.x[2, t] - xN[2]))
         for t in model.tidu
     )
     model.terminal_cost = (
         w_xy_T * ((model.x[0, N] - xN[0])**2 + (model.x[1, N] - xN[1])**2)
         + w_yaw_T * (1 - pyo.cos(model.x[2, N] - xN[2]))
     )
-    model.shortest_time_cost  = sum((model.x[1, t]-bf[1])**2 for t in model.tidx if t < N)
     model.turning_cost = sum(w_w * (model.u[1, t]**2) for t in model.tidu)
     model.speed_cost   = sum(w_v * (model.u[0, t]**2) for t in model.tidu)
     total_cost = model.track_cost + model.terminal_cost + model.speed_cost + model.turning_cost
@@ -364,23 +362,14 @@ def _solve_cftoc_disc(gam, tau, Ts, N, x0, xN, xL, xU, uL, uU, bf, Af):
     # # Terminal constraint
     # model.constraint9 = pyo.Constraint(model.xidx, rule=lambda model, i: model.x[i, N] == bf[i])
 
-    # Initial guess to make solver run faster for nonlinear dynamics
-    # for t in model.tidx:
-    #     model.x[0,t].set_value(x0[0])
-    #     model.x[1,t].set_value(x0[1])
-    #     model.x[2,t].set_value(x0[2])
-    # for t in model.tidu:
-    #     model.u[0,t].set_value(0.0)
-    #     model.u[1,t].set_value(0.0)
-    if _MPC_WARM["x"] is not None:
-        for i in model.nx:
-            for t in model.tidx:
-                model.x[i,t].set_value(float(_MPC_WARM["x"][i, min(t+1, N)]))
-    if _MPC_WARM["u"] is not None:
-        for i in model.nu:
-            for t in model.tidu:
-                model.u[i,t].set_value(float(_MPC_WARM["u"][i, min(t+1, N-1)]))
-
+    # Optional: initialize with nominal (helps solver even though it's affine)
+    for i in model.nx:
+        for t in model.tidx:
+            model.x[i, t].set_value(float(xbar[i, t]))
+        model.x[i, 0].set_value(float(x0[i]))
+    for i in model.nu:
+        for t in model.tidu:
+            model.u[i, t].set_value(float(ubar[i, t]))
    
     # Now we can solve:
     solver = pyo.SolverFactory('ipopt')
@@ -398,12 +387,6 @@ def _solve_cftoc_disc(gam, tau, Ts, N, x0, xN, xL, xU, uL, uU, bf, Af):
     results = solver.solve(model)
     print("IPOPT status:", results.solver.status)
     print("IPOPT term:", results.solver.termination_condition)
-
-    if results.solver.termination_condition not in (
-        TerminationCondition.optimal,
-        TerminationCondition.feasible
-    ):
-        _report_constraint_violations(model, top_k=15, tol=1e-6)
 
 
     # u1 = [pyo.value(model.u[0,0])]
@@ -423,6 +406,10 @@ def _solve_cftoc_disc(gam, tau, Ts, N, x0, xN, xL, xU, uL, uU, bf, Af):
             TerminationCondition.feasible
         )
     )
+    if not feas:
+        _report_constraint_violations(model, top_k=15, tol=1e-6)
+
+    # extract values to return
     xOpt = np.zeros((nx,N+1))
     for i in model.nx:
         for t in model.tidx:
@@ -482,9 +469,9 @@ def traj_mpc(model, data, path, dt=0.05) -> tuple[float, float] :
     # Simulation params
     # STILL NEED TO FIGURE OUT OUT TO SIMULATE OVER A REDUCED HORIZON SIZE (NOT EVERY .001S)
     # AND HOW TO CONVERT DISTANCE TO TIME
-    #Ts = dt                 # time step - every time the controller is called
-    Ts = 0.2
-    N = 20                  # Horizon
+    Ts = dt                 # time step - every time the controller is called
+    #Ts = 0.2
+    N = 10                  # Horizon
     TFinal = Ts*N           # picked to be 1 second. Increase if myopic. Decrease if computation is slow
 
 
@@ -499,14 +486,15 @@ def traj_mpc(model, data, path, dt=0.05) -> tuple[float, float] :
     target_idx = int(data.userdata[1])
     xt, yt, _ = path[target_idx]    # target waypoint
     xt_next, yt_next, _ = path[target_idx + 1] if target_idx < len(path)-1 else [xt,yt,0]     # NEXT target waypoint
-    yaw_des = np.arctan2(yt_next - yt,
+    yawt = np.arctan2(yt_next - yt,
                         xt_next - xt)
     
-    zf = np.array([xt, yt, yaw_des], dtype=float)
+    # terminal constraint point
+    zf = np.array([xt, yt, yawt], dtype=float)
 
     # Terminal constraint box half-widths
-    eps_xy  = 0.05   # meters
-    eps_yaw = 0.01   # radians
+    eps_xy  = 0.1   # meters
+    eps_yaw = 0.05   # radians
 
     # Af * x_N <= bf encodes:
     #  x <= xt+eps_xy,  -x <= -xt+eps_xy
@@ -526,21 +514,21 @@ def traj_mpc(model, data, path, dt=0.05) -> tuple[float, float] :
         -xt + eps_xy,
         yt + eps_xy,
         -yt + eps_xy,
-        yaw_des + eps_yaw,
-        -yaw_des + eps_yaw,
+        yawt + eps_yaw,
+        -yawt + eps_yaw,
     ], dtype=float)
 
     # Boundaries
     xL = [-1000, -1000, -np.pi]
     xU = [1000, 1000, np.pi]
-    uL = [0, -1]     # 0.5 to limit linear speed
-    uU = [0.5, 1]
+    uL = [0, -1]
+    uU = [0.5, 1]   # 0.5 to limit linear speed
 
     x_old = _MPC_WARM["x"] if _MPC_WARM["x"] is not None else np.zeros((3, N+1), dtype=float)
     u_old = _MPC_WARM["u"] if _MPC_WARM["u"] is not None else np.zeros((2, N), dtype=float)
     feas, xOpt, uOpt, JOpt = _solve_cftoc_lin(gam, tau, Ts, N, z0, zf, xL, xU, uL, uU, bf, Af, x_old, u_old)
     print(f"Current position: ({z0[0]}, {z0[1]}, {z0[2]})")
-    print(f"Target position: ({xt}, {yt}, {yaw_des})")
+    print(f"Target position: ({xt}, {yt}, {yawt})")
     print("optimal states = ", xOpt)
     print("optimal inputs = ", uOpt)
     # after you solve and extract xOpt, uOpt:

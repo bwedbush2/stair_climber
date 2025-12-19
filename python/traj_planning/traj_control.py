@@ -97,7 +97,7 @@ def _init_if_needed(model, data, scene) :
                 f"got shape {path.shape}"
             )
 
-        path_interp = _interpolate_path(path, 3)
+        path_interp = _interpolate_path(path, 2)
         _PATH_CACHE = path_interp
 
         # Initialize userdata state
