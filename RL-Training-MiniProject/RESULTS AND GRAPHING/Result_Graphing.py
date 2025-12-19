@@ -11,57 +11,100 @@ PRB1_PATH = os.path.join(problem1_folder, "events.out.tfevents.1766105278.677a1d
 PRB2_PATH = os.path.join(problem2_folder, "events.out.tfevents.1766103354.d55c2424f1bd.13450.0")
 PRB3_PATH = os.path.join(problem3_folder, "ray_simulation.xml")
 
-# Select which file to plot
-file_path = PRB1_PATH  # Change to PRB2_PATH if needed
+file_path = PRB1_PATH
 
 # 1. Load the data
 print(f"Loading {file_path}...")
-if not os.path.exists(file_path):
-    print(f"Error: File not found at {file_path}")
-    exit()
-
 event_acc = EventAccumulator(file_path)
 event_acc.Reload()
 
 # 2. Extract available tags
 tags = event_acc.Tags()['scalars']
-print("Found tags:", tags)
 
-# 3. Select the correct tags for Reward and Length
+# 3. Define Tags
 reward_tag = 'Train/mean_reward'
 length_tag = 'Train/mean_episode_length'
+lin_track_tag = 'Episode_Reward/track_linear_velocity'
+ang_track_tag = 'Episode_Reward/track_angular_velocity'
+lin_err_tag = 'Metrics/twist/error_vel_xy'
+ang_err_tag = 'Metrics/twist/error_vel_yaw'
 
-# Check if tags exist before plotting to avoid crashes
-if reward_tag in tags and length_tag in tags:
-    # Get reward data
-    r_events = event_acc.Scalars(reward_tag)
-    r_steps = [e.step for e in r_events]
-    r_values = [e.value for e in r_events]
+# 4. Extract Data Explicitly
+# Mean Reward
+r_events = event_acc.Scalars(reward_tag)
+r_steps = [e.step for e in r_events]
+r_values = [e.value for e in r_events]
 
-    # Get length data
-    l_events = event_acc.Scalars(length_tag)
-    l_steps = [e.step for e in l_events]
-    l_values = [e.value for e in l_events]
+# Episode Length
+l_events = event_acc.Scalars(length_tag)
+l_steps = [e.step for e in l_events]
+l_values = [e.value for e in l_events]
 
-    # --- MODIFIED PLOTTING SECTION ---
-    # Create figure with 2 rows, 1 column
-    # sharex=True ensures both plots share the same x-axis scale
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+# Linear Tracking Reward
+lt_events = event_acc.Scalars(lin_track_tag)
+lt_steps = [e.step for e in lt_events]
+lt_values = [e.value for e in lt_events]
 
-    # Plot Mean Reward (Top)
-    ax1.plot(r_steps, r_values, color='#1f77b4', linewidth=2)
-    ax1.set_title(f'Mean Reward ({reward_tag})')
-    ax1.set_ylabel('Reward')
-    ax1.grid(True, alpha=0.3)
+# Angular Tracking Reward
+at_events = event_acc.Scalars(ang_track_tag)
+at_steps = [e.step for e in at_events]
+at_values = [e.value for e in at_events]
 
-    # Plot Episode Length (Bottom)
-    ax2.plot(l_steps, l_values, color='#ff7f0e', linewidth=2)
-    ax2.set_title(f'Episode Length ({length_tag})')
-    ax2.set_ylabel('Length')
-    ax2.set_xlabel('Steps')  # X-label is only needed at the bottom
-    ax2.grid(True, alpha=0.3)
+# Linear Velocity Error
+le_events = event_acc.Scalars(lin_err_tag)
+le_steps = [e.step for e in le_events]
+le_values = [e.value for e in le_events]
 
-    plt.tight_layout()
-    plt.show()
-else:
-    print(f"Error: Could not find required tags '{reward_tag}' or '{length_tag}' in the file.")
+# Angular Velocity Error
+ae_events = event_acc.Scalars(ang_err_tag)
+ae_steps = [e.step for e in ae_events]
+ae_values = [e.value for e in ae_events]
+
+# --- FIGURE 1: Reward + Length ---
+plt.figure(figsize=(10, 8))
+
+# Subplot 1: Mean Reward
+plt.subplot(2, 1, 1)
+plt.plot(r_steps, r_values, color='#1f77b4', linewidth=2)
+plt.title(f'Mean Reward')
+plt.ylabel('Reward')
+plt.grid(True, alpha=0.3)
+# Hide x-labels for the top plot to avoid clutter
+plt.gca().axes.xaxis.set_ticklabels([])
+
+# Subplot 2: Episode Length
+plt.subplot(2, 1, 2)
+plt.plot(l_steps, l_values, color='#ff7f0e', linewidth=2)
+plt.title(f'Episode Length')
+plt.ylabel('Length')
+plt.xlabel('Steps')
+plt.grid(True, alpha=0.3)
+
+plt.tight_layout()
+
+# --- FIGURE 2: Tracking Rewards + Metrics ---
+plt.figure(figsize=(10, 8))
+
+# Subplot 1: Tracking Rewards (Linear & Angular)
+plt.subplot(2, 1, 1)
+plt.plot(lt_steps, lt_values, label='Linear Velocity Reward', linewidth=2)
+plt.plot(at_steps, at_values, label='Angular Velocity Reward', linewidth=2)
+plt.title('Tracking Rewards')
+plt.ylabel('Reward')
+plt.legend()
+plt.grid(True, alpha=0.3)
+# Hide x-labels for the top plot
+plt.gca().axes.xaxis.set_ticklabels([])
+
+# Subplot 2: Velocity Errors (Linear & Angular)
+plt.subplot(2, 1, 2)
+plt.plot(le_steps, le_values, label='Linear Velocity Error', linewidth=2)
+plt.plot(ae_steps, ae_values, label='Angular Velocity Error', linewidth=2)
+plt.title('Velocity Tracking Errors')
+plt.ylabel('Error')
+plt.xlabel('Steps')
+plt.legend()
+plt.grid(True, alpha=0.3)
+
+plt.tight_layout()
+plt.show() # Shows Figure 2
