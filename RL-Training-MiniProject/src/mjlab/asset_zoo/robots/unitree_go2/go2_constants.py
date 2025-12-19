@@ -1,10 +1,3 @@
-# ---------------------------------------------------------------------------
-# Part4 (a) Specify robot
-# ---------------------------------------------------------------------------
-# Follow style in src/mjlab/asset_zoo/robots/unitree_go1/go1_constants.py
-# Write a Go2 module
-# The XML is provided in src/mjlab/asset_zoo/robots/unitree_go2/xmls/go2.xml
-
 """Unitree Go2 constants (Student Version with TODOs and Explanations)."""
 
 from pathlib import Path
@@ -27,22 +20,22 @@ from mjlab.utils.spec_config import CollisionCfg
 # ---------------------------------------------------------------------------
 
 # TODO: Load the correct "go2.xml" file for your setup.
-GO1_XML: Path = (
+GO2_XML: Path = (
   MJLAB_SRC_PATH / "asset_zoo" / "robots" / "unitree_go2" / "xmls" / "go2.xml"
 )
-assert GO1_XML.exists(), f"GO1 XML not found at {GO1_XML}"
+assert GO2_XML.exists(), f"GO2 XML not found at {GO2_XML}"
 
 
 def get_assets(meshdir: str) -> dict[str, bytes]:
   """Load mesh/texture assets for the robot."""
   assets: dict[str, bytes] = {}
-  update_assets(assets, GO1_XML.parent / "assets", meshdir)
+  update_assets(assets, GO2_XML.parent / "assets", meshdir)
   return assets
 
 
 def get_spec() -> mujoco.MjSpec:
   """Load the MJCF file and attach required assets."""
-  spec = mujoco.MjSpec.from_file(str(GO1_XML))
+  spec = mujoco.MjSpec.from_file(str(GO2_XML))
   spec.assets = get_assets(spec.meshdir)
   return spec
 
@@ -56,24 +49,24 @@ ROTOR_INERTIA = 0.000111842
 
 # Gear ratios for hip and knee joints.
 HIP_GEAR_RATIO = 6
-KNEE_GEAR_RATIO = HIP_GEAR_RATIO * 1.5
+KNEE_GEAR_RATIO = 12
 
 #--------------------------------------------------------------------------#
 # Students must fill in the missing effort and velocity limits.
-# These come from the real Go1 hardware specs. Refer to the writeup for values.
+# These come from the real Go2 hardware specs. Refer to the writeup for values.
 #--------------------------------------------------------------------------#
 J_HIP = ROTOR_INERTIA * HIP_GEAR_RATIO**2
 J_KNEE = ROTOR_INERTIA * KNEE_GEAR_RATIO**2
 HIP_ACTUATOR = ElectricActuator(
-  reflected_inertia= J_HIP,    # TODO: calculate armature based on rotor inertia and gear ratios
-  velocity_limit= 30.1,      # TODO: Insert max joint velocity (rad/s).
-  effort_limit= 23.7,        # TODO: Insert torque limit (Nm).
+  reflected_inertia= J_HIP,
+  velocity_limit= 30.1,
+  effort_limit= 23.7,
 )
 
 KNEE_ACTUATOR = ElectricActuator(
-  reflected_inertia=J_KNEE,   # TODO: calculate armature based on rotor inertia and gear ratios
-  velocity_limit= 20.06,      # TODO: Insert max joint velocity (rad/s).
-  effort_limit= 35.55,        # TODO: Insert torque limit (Nm).
+  reflected_inertia=J_KNEE,
+  velocity_limit= 15.70,
+  effort_limit= 45.43,
 )
 
 # Natural frequency and damping ratio for PD-like actuator behavior.
@@ -88,13 +81,13 @@ DAMPING_RATIO = 2.0                    # Critically damped-ish behavior
 #--------------------------------------------------------------------------#
 
 STIFFNESS_HIP = J_HIP * NATURAL_FREQ**2
-DAMPING_HIP = 2 * DAMPING_RATIO * J_HIP * NATURAL_FREQ     
+DAMPING_HIP = 2 * DAMPING_RATIO * J_HIP * NATURAL_FREQ
 
-STIFFNESS_KNEE = J_KNEE * NATURAL_FREQ**2   
-DAMPING_KNEE = 2 * DAMPING_RATIO * J_KNEE * NATURAL_FREQ       
+STIFFNESS_KNEE = J_KNEE * NATURAL_FREQ**2
+DAMPING_KNEE = 2 * DAMPING_RATIO * J_KNEE * NATURAL_FREQ
 
 # Builtin PD position actuators for hip and knee joints.
-GO1_HIP_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
+GO2_HIP_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
   joint_names_expr=(".*_hip_joint", ".*_thigh_joint"),
   stiffness=STIFFNESS_HIP,
   damping=DAMPING_HIP,
@@ -102,7 +95,7 @@ GO1_HIP_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
   armature=HIP_ACTUATOR.reflected_inertia,
 )
 
-GO1_KNEE_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
+GO2_KNEE_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
   joint_names_expr=(".*_calf_joint",),
   stiffness=STIFFNESS_KNEE,
   damping=DAMPING_KNEE,
@@ -113,7 +106,7 @@ GO1_KNEE_ACTUATOR_CFG = BuiltinPositionActuatorCfg(
 ##
 # Keyframe initial state.
 ##
-# These joint angles represent a stable “standing” pose for Go1.
+# These joint angles represent a stable “standing” pose for Go2.
 #
 
 INIT_STATE = EntityCfg.InitialStateCfg(
@@ -163,16 +156,16 @@ FULL_COLLISION = CollisionCfg(
 # Final articulation config (students do not change this).
 ##
 
-GO1_ARTICULATION = EntityArticulationInfoCfg(
+GO2_ARTICULATION = EntityArticulationInfoCfg(
   actuators=(
-    GO1_HIP_ACTUATOR_CFG,
-    GO1_KNEE_ACTUATOR_CFG,
+    GO2_HIP_ACTUATOR_CFG,
+    GO2_KNEE_ACTUATOR_CFG,
   ),
   soft_joint_pos_limit_factor=0.9,
 )
 
-def get_go1_robot_cfg() -> EntityCfg:
-  """Return a fresh Go1 robot configuration.
+def get_go2_robot_cfg() -> EntityCfg:
+  """Return a fresh Go2 robot configuration.
 
   Students should not modify this; the purpose is to ensure
   environment instantiation always receives a clean config.
@@ -181,7 +174,7 @@ def get_go1_robot_cfg() -> EntityCfg:
     init_state=INIT_STATE,
     collisions=(FULL_COLLISION,),
     spec_fn=get_spec,
-    articulation=GO1_ARTICULATION,
+    articulation=GO2_ARTICULATION,
   )
 
 
@@ -193,12 +186,12 @@ def get_go1_robot_cfg() -> EntityCfg:
 # Students should examine this, but not modify it.
 ##
 
-GO1_ACTION_SCALE: dict[str, float] = {}
-for a in GO1_ARTICULATION.actuators:
+GO2_ACTION_SCALE: dict[str, float] = {}
+for a in GO2_ARTICULATION.actuators:
   assert isinstance(a, BuiltinPositionActuatorCfg)
   e = a.effort_limit
   s = a.stiffness
   names = a.joint_names_expr
   assert e is not None
   for n in names:
-    GO1_ACTION_SCALE[n] = 0.25 * e/s
+    GO2_ACTION_SCALE[n] = 0.25 * e/s
