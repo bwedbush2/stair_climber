@@ -191,21 +191,21 @@ def create_velocity_env_cfg(
     "feet_height": ObservationTermCfg(
         func=mdp.foot_height,
         params={
-            "asset_cfg": SceneEntityCfg("robot", body_names=site_names),
+            "asset_cfg": SceneEntityCfg("robot", site_names=site_names),
         },
     ),
 
     "feet_air_time": ObservationTermCfg(
         func=mdp.foot_air_time,
         params={
-            "sensor_cfg": feet_sensor_cfg,
+            "sensor_name": feet_sensor_cfg.name,
         },
     ),
 
     "feet_contact": ObservationTermCfg(
         func=mdp.foot_contact_forces,
         params={
-            "sensor_cfg": feet_sensor_cfg,
+            "sensor_name": feet_sensor_cfg.name,
         },
     ),
 
@@ -365,19 +365,19 @@ def create_velocity_env_cfg(
       params={
         "target_height": 0.1,                                         
         "command_threshold": 0.05,                                    
-        "asset_cfg": SceneEntityCfg("robot", body_names=site_names),  
+        "asset_cfg": SceneEntityCfg("robot", site_names=site_names),  
       },
     ),
 
     "foot_swing_height": RewardTermCfg(
-      func=mdp.foot_swing_height,
+      func=mdp.feet_swing_height,
       weight=-0.25,  
       params={
         "target_height": 0.1,            
         "command_threshold": 0.01,       
         "command_name": "twist",
-        "sensor_cfg": feet_sensor_cfg,   
-        "asset_cfg": SceneEntityCfg("robot", body_names=site_names),
+        "sensor_name": feet_sensor_cfg.name,   
+        "asset_cfg": SceneEntityCfg("robot", site_names=site_names),
       },
     ),
     "foot_slip": RewardTermCfg(
@@ -386,8 +386,8 @@ def create_velocity_env_cfg(
       params={
         "command_threshold": 0.01,
         "command_name": "twist",
-        "sensor_cfg": feet_sensor_cfg,                                
-        "asset_cfg": SceneEntityCfg("robot", body_names=site_names),  
+        "sensor_name": feet_sensor_cfg.name,                                
+        "asset_cfg": SceneEntityCfg("robot", site_names=site_names),  
       },
     ),
     
