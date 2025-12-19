@@ -11,6 +11,16 @@ PRB1_PATH = os.path.join(problem1_folder, "events.out.tfevents.1766105278.677a1d
 PRB2_PATH = os.path.join(problem2_folder, "events.out.tfevents.1766103354.d55c2424f1bd.13450.0")
 PRB3_PATH = os.path.join(problem3_folder, "ray_simulation.xml")
 
+def get_data(tag):
+    if tag in tags:
+        events = event_acc.Scalars(tag)
+        steps = [e.step for e in events]
+        values = [e.value for e in events]
+        return steps, values
+    else:
+        print(f"Warning: Tag '{tag}' not found.")
+        return [], []
+
 file_path = PRB1_PATH
 
 # 1. Load the data
@@ -20,6 +30,7 @@ event_acc.Reload()
 
 # 2. Extract available tags
 tags = event_acc.Tags()['scalars']
+print(tags)
 
 # 3. Define Tags
 reward_tag = 'Train/mean_reward'
@@ -28,6 +39,7 @@ lin_track_tag = 'Episode_Reward/track_linear_velocity'
 ang_track_tag = 'Episode_Reward/track_angular_velocity'
 lin_err_tag = 'Metrics/twist/error_vel_xy'
 ang_err_tag = 'Metrics/twist/error_vel_yaw'
+slip_metric_tag = 'Metrics/slip_velocity_mean'
 
 # 4. Extract Data Explicitly
 # Mean Reward
@@ -59,6 +71,12 @@ le_values = [e.value for e in le_events]
 ae_events = event_acc.Scalars(ang_err_tag)
 ae_steps = [e.step for e in ae_events]
 ae_values = [e.value for e in ae_events]
+
+# Slip Stuff
+slip_events = event_acc.Scalars(slip_metric_tag)
+slip_steps1 = [e.step for e in slip_events]
+slip_values1 = [e.value for e in slip_events]
+
 
 # --- FIGURE 1: Reward + Length ---
 plt.figure(figsize=(10, 8))
@@ -107,4 +125,48 @@ plt.legend()
 plt.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.show() # Shows Figure 2
+
+#----------------------------------------------------------------------------------------------
+# PROBLEM 2
+file_path = PRB2_PATH
+
+# 1. Load the data
+event_acc = EventAccumulator(file_path)
+event_acc.Reload()
+
+# 2. Extract available tags
+
+tags = event_acc.Tags()['scalars']
+slip_events = event_acc.Scalars(slip_metric_tag)
+slip_steps2 = [e.step for e in slip_events]
+slip_values2 = [e.value for e in slip_events]
+
+le_events = event_acc.Scalars(lin_err_tag)
+le_steps2 = [e.step for e in le_events]
+le_values2 = [e.value for e in le_events]
+
+plt.figure(figsize=(10, 8))
+
+# Subplot 1: Foot Slip Metric
+plt.subplot(2, 1, 1)
+plt.plot(slip_steps1, slip_values1, label='Without Critic Observations', linewidth=2)
+plt.plot(slip_steps2, slip_values2, label='With Critic Observations', linewidth=2)
+plt.title('Mean Slip Velocity')
+plt.ylabel('Slip Velocity (m/s)')
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.gca().axes.xaxis.set_ticklabels([])
+
+# Subplot 2: Tracking Performance (Re-plotted for context)
+plt.subplot(2, 1, 2)
+plt.plot(le_steps, le_values, label='Without Critic Observations', linewidth=2)
+plt.plot(le_steps2, le_values2, label='With Critic Observations', linewidth=2)
+plt.title('Linear Velocity Tracking Error')
+plt.ylabel('Error')
+plt.xlabel('Steps')
+plt.legend()
+plt.grid(True, alpha=0.3)
+
+
+plt.tight_layout()
+plt.show()
