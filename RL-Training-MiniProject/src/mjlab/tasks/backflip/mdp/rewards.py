@@ -32,7 +32,9 @@ def track_base_height(
     """
     asset: Entity = env.scene[asset_cfg.name]
     # Get the desired height from the command generator
-    target_height = env.command_manager.get_command(command_name)
+    command = env.command_manager.get_command(command_name)
+    # INDEX 0 IS HEIGHT
+    target_height = command[:, 0]
     assert target_height is not None, f"Command '{command_name}' not found."
     
     # Get current height (z-position)
@@ -58,7 +60,9 @@ def track_base_pitch(
     This guides the robot through the rotation of the backflip.
     """
     asset: Entity = env.scene[asset_cfg.name]
-    target_pitch = env.command_manager.get_command(command_name)
+    command = env.command_manager.get_command(command_name)
+    # INDEX 1 IS PITCH
+    target_pitch = command[:, 1]
     assert target_pitch is not None, f"Command '{command_name}' not found."
     
     # Get current pitch from quaternion

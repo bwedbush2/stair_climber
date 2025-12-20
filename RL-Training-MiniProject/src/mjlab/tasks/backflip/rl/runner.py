@@ -9,6 +9,29 @@ from mjlab.tasks.velocity.rl.exporter import (
   export_velocity_policy_as_onnx,
 )
 
+import os
+import wandb
+from rsl_rl.runners import OnPolicyRunner
+from mjlab.rl import RslRlVecEnvWrapper
+
+class BackflipOnPolicyRunner(OnPolicyRunner):
+    """
+    Runner for the Backflip task. 
+    Inherits directly from OnPolicyRunner to handle standard training and saving.
+    """
+    env: RslRlVecEnvWrapper
+
+    def save(self, path: str, infos=None):
+        """Save the model and training information."""
+        # This calls the standard rsl_rl save function which saves 'model_*.pt'
+        super().save(path, infos)
+        
+        # Optional: Save to WandB if you are using it
+        if getattr(self, "logger_type", None) in ["wandb"]:
+            # Check if the file exists before saving to avoid errors
+            if os.path.exists(path):
+                wandb.save(path, base_path=os.path.dirname(path))
+                
 
 class VelocityOnPolicyRunner(OnPolicyRunner):
   env: RslRlVecEnvWrapper

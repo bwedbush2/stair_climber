@@ -207,3 +207,159 @@ class UniformVelocityCommandCfg(CommandTermCfg):
         "The velocity command has heading commands active (heading_command=True) but "
         "the `ranges.heading` parameter is set to None."
       )
+
+class BackflipCommand(CommandTerm):
+    """
+    Command generator for a backflip trajectory.
+    Outputs a 2D command: [Target Base Height, Target Base Pitch]
+    """
+    cfg: BackflipCommandCfg
+
+    def __init__(self, cfg: BackflipCommandCfg, env: ManagerBasedRlEnv):
+        super().__init__(cfg, env)
+
+        self.robot: Entity = env.scene[cfg.asset_name]
+
+        # Command buffer: [Height, Pitch]
+        self.bf_command_b = torch.zeros(self.num_envs, 2, device=self.device)
+        
+        # Internal state tracking
+        self.time_in_cycle = torch.zeros(self.num_envs, device=self.device)
+        self.target_jump_height = torch.zeros(self.num_envs, device=self.device)
+
+        # Metrics
+        self.metrics["error_height"] = torch.zeros(self.num_envs, device=self.device)
+        self.metrics["error_pitch"] = torch.zeros(self.num_envs, device=self.device)
+
+    @property
+    def command(self) -> torch.Tensor:
+        """Returns the current command [Target Height, Target Pitch]."""
+        return self.bf_command_b
+
+    def _update_metrics(self) -> None:
+        # Calculate tracking error for height and pitch
+        current_height = self.robot.data.root_link_pos_w[:, 2]
+        # Approximate pitch from z-axis of rotation matrix (simplification for metrics)
+        # or use exact euler extraction if available. 
+        # Here we just track height error as the primary metric.
+        self.metrics["error_height"] += (
+            torch.abs(self.bf_command_b[:, 0] - current_height) 
+            / (self.cfg.cycle_time / self._env.step_dt)
+        )
+
+    def _resample_command(self, env_ids: torch.Tensor) -> None:
+        """
+        Resets the backflip cycle for the specified environments.
+        """
+        # Reset timer
+        self.time_in_cycle[env_ids] = 0.0
+
+        # Sample a specific jump height for this attempt (if ranges provided)
+        r = torch.empty(len(env_ids), device=self.device)
+        self.target_jump_height[env_ids] = r.uniform_(*self.cfg.ranges.jump_height)
+
+        # Initialize command to standing state
+        self.bf_command_b[env_ids, 0] = 0.28  # Default standing height
+        self.bf_command_b[env_ids, 1] = 0.0   # Default pitch
+
+    def _update_command(self) -> None:
+        """
+        Computes the target height and pitch based on the current time in the cycle.
+        """
+        # Advance timer
+        self.time_in_cycle += self._env.step_dt
+        
+        # Wrap timer for continuous training
+        self.time_in_cycle = torch.remainder(self.time_in_cycle, self.cfg.cycle_time)
+        
+        # Normalize time t in [0, 1]
+        t = self.time_in_cycle / self.cfg.cycle_time
+        
+        # --- Trajectory Generation ---
+        # 1. Base Height Trajectory (Squat -> Jump -> Land)
+        target_h = torch.zeros_like(t)
+        
+        # Phase 1: Squat (0.0 to 0.2)
+        mask_squat = (t < 0.2)
+        target_h[mask_squat] = 0.28 + (0.15 - 0.28) * (t[mask_squat] / 0.2)
+        
+        # Phase 2: Air/Jump (0.2 to 0.7)
+        mask_air = (t >= 0.2) & (t < 0.7)
+        t_air = (t[mask_air] - 0.2) / 0.5
+        # Parabolic jump: peaks at target_jump_height
+        h_peak = self.target_jump_height[mask_air]
+        target_h[mask_air] = 0.15 + (h_peak - 0.15) * 4 * (t_air - t_air**2)
+        
+        # Phase 3: Land (0.7 to 1.0)
+        mask_land = (t >= 0.7)
+        t_land = (t[mask_land] - 0.7) / 0.3
+        target_h[mask_land] = 0.15 + (0.28 - 0.15) * t_land
+
+        self.bf_command_b[:, 0] = target_h
+
+        # 2. Base Pitch Trajectory (Rotate 360)
+        target_p = torch.zeros_like(t)
+        
+        # Only rotate during the jump phase (0.25 to 0.75)
+        mask_spin = (t >= 0.25) & (t < 0.75)
+        t_spin = (t[mask_spin] - 0.25) / 0.5
+        target_p[mask_spin] = -2 * np.pi * t_spin
+        
+        self.bf_command_b[:, 1] = target_p
+
+    def _debug_vis_impl(self, visualizer: "DebugVisualizer") -> None:
+        """
+        Visualize the target height and pitch.
+        """
+        batch = visualizer.env_idx
+        if batch >= self.num_envs:
+            return
+
+        # Get current state
+        base_pos_ws = self.robot.data.root_link_pos_w.cpu().numpy()
+        base_pos_w = base_pos_ws[batch]
+        
+        # Get command
+        cmd = self.bf_command_b[batch].cpu().numpy() # [height, pitch]
+        target_height = cmd[0]
+
+        # Skip if robot uninitialized
+        if np.linalg.norm(base_pos_w) < 1e-6:
+            return
+
+        # Visualization Config
+        scale = self.cfg.viz.scale
+        color = self.cfg.viz.target_color
+
+        # Draw Target Height (Sphere/Point)
+        # We project the current XY position to the Target Z
+        target_pos = base_pos_w.copy()
+        target_pos[2] = target_height
+        
+        # Add sphere at target height
+        # visualizer.add_point(
+        #     target_pos, radius=0.05 * scale, color=color
+        # )
+        
+        # Optional: Draw arrow indicating "Up" or Orientation if desired
+        # For now, just the height target is most useful.
+
+
+@dataclass(kw_only=True)
+class BackflipCommandCfg(CommandTermCfg):
+    asset_name: str
+    cycle_time: float = 1.5
+    class_type: type[CommandTerm] = BackflipCommand
+
+    @dataclass
+    class Ranges:
+        jump_height: tuple[float, float] = (0.5, 0.7) # Min/Max jump height
+    
+    ranges: Ranges = field(default_factory=Ranges)
+
+    @dataclass
+    class VizCfg:
+        scale: float = 1.0
+        target_color: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.5)
+
+    viz: VizCfg = field(default_factory=VizCfg)

@@ -4,6 +4,6 @@ from mjlab.tasks.velocity.rl.exporter import (
 from mjlab.tasks.velocity.rl.exporter import (
   export_velocity_policy_as_onnx as export_velocity_policy_as_onnx,
 )
-from mjlab.tasks.velocity.rl.runner import (
-  VelocityOnPolicyRunner as VelocityOnPolicyRunner,
+from mjlab.tasks.backflip.rl.runner import (
+  BackflipOnPolicyRunner as BackflipOnPolicyRunner,
 )
