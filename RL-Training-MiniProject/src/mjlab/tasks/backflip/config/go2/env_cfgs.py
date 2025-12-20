@@ -13,21 +13,21 @@ from mjlab.asset_zoo.robots import (
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.managers.manager_term_config import TerminationTermCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg
-from mjlab.tasks.velocity import mdp
-from mjlab.tasks.velocity.velocity_env_cfg import VIEWER_CONFIG, create_velocity_env_cfg
+from mjlab.tasks.backflip import mdp
+from mjlab.tasks.backflip.backflip_env_cfg import VIEWER_CONFIG, create_backflip_env_cfg
 from mjlab.utils.retval import retval
 
 
 @retval
 def UNITREE_GO2_ROUGH_ENV_CFG() -> ManagerBasedRlEnvCfg:
-  """Create Unitree Go2 rough terrain velocity tracking configuration."""
+  """Create Unitree Go2 Backflip configuration."""
+  
+  # 1. Define Robot Geometry/Sensors
   foot_names = ("FR", "FL", "RR", "RL")
   site_names = ("FR", "FL", "RR", "RL")
-
-  # NOTE: Verify these geom names match your Go2 MJCF (XML) file.
-  # Some Go2 models might use "foot" instead of "foot_collision".
   geom_names = tuple(f"{name}_foot_collision" for name in foot_names)
 
+  # Sensors
   feet_ground_cfg = ContactSensorCfg(
     name="feet_ground_contact",
     primary=ContactMatch(mode="geom", pattern=geom_names, entity="robot"),
@@ -37,6 +37,7 @@ def UNITREE_GO2_ROUGH_ENV_CFG() -> ManagerBasedRlEnvCfg:
     num_slots=1,
     track_air_time=True,
   )
+
   nonfoot_ground_cfg = ContactSensorCfg(
     name="nonfoot_ground_touch",
     primary=ContactMatch(
@@ -53,31 +54,19 @@ def UNITREE_GO2_ROUGH_ENV_CFG() -> ManagerBasedRlEnvCfg:
     num_slots=1,
   )
 
-  # --- CHANGE 2: Use Go2 Robot Config and Action Scale ---
-  cfg = create_velocity_env_cfg(
+  # 2. Call the Backflip Factory
+  # Note: We removed posture_std_standing/walking/running arguments 
+  # because they are not needed for this ballistic task.
+  cfg = create_backflip_env_cfg(
     robot_cfg=get_go2_robot_cfg(),
     action_scale=GO2_ACTION_SCALE,
     viewer_body_name="trunk",
     site_names=site_names,
     feet_sensor_cfg=feet_ground_cfg,
     self_collision_sensor_cfg=nonfoot_ground_cfg,
-    foot_friction_geom_names=geom_names,
-    # These noise parameters are generally safe to keep consistent between Go1/Go2
-    # for initial training, as the morphologies are similar.
-    posture_std_standing={
-      r".*(FR|FL|RR|RL)_(hip|thigh)_joint.*": 0.05,
-      r".*(FR|FL|RR|RL)_calf_joint.*": 0.1,
-    },
-    posture_std_walking={
-      r".*(FR|FL|RR|RL)_(hip|thigh)_joint.*": 0.3,
-      r".*(FR|FL|RR|RL)_calf_joint.*": 0.6,
-    },
-    posture_std_running={
-      r".*(FR|FL|RR|RL)_(hip|thigh)_joint.*": 0.3,
-      r".*(FR|FL|RR|RL)_calf_joint.*": 0.6,
-    },
   )
 
+  # 3. Final Overrides (Optional)
   cfg.viewer = deepcopy(VIEWER_CONFIG)
   cfg.viewer.body_name = "trunk"
   cfg.viewer.distance = 1.5
@@ -88,6 +77,7 @@ def UNITREE_GO2_ROUGH_ENV_CFG() -> ManagerBasedRlEnvCfg:
     func=mdp.illegal_contact,
     params={"sensor_name": "nonfoot_ground_touch"},
   )
+  
   return cfg
 
 
