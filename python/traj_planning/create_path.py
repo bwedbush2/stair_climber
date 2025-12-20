@@ -50,6 +50,10 @@ def create_path(model, data, scene: int) -> list[tuple[float, float]]:
             (x0, y0, 2),       # start pos
             (3.0, 3.0, 2),     # target1
             (6.0, 0.0, 2),     # target2
+            (6.0, -2.0, 2),      # target 3
+            (3.0, -5.0, 2),     # target 4
+            (-2.0, -5.0, 2),     # target 5
+            (x0, y0, 2),         # back to start
         ],
         3: [
             (x0, y0, 2),       # start pos

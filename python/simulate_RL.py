@@ -416,7 +416,7 @@ def controller(model, data, scene, rl_agent=None):
     id_level = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "level_bin")
 
     drive_cmd, turn_cmd = 0.0, 0.0
-    dt_drive = 0.25
+    dt_drive = 0.1
     # reset if simulation was reset
     if data.time < NEXT_DRIVE_CONTROL_TIME - 2*dt_drive: 
         NEXT_DRIVE_CONTROL_TIME = data.time
