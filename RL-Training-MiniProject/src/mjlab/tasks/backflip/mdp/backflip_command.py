@@ -83,13 +83,14 @@ class BackflipCommand(CommandTerm):
         # --- 2. Base Pitch Trajectory ---
         target_p = torch.zeros_like(t)
 
-        # Spin Phase - DELAYED to 0.35 to ensure feet have left ground
-        # This prevents the "belly flop" where it rotates while standing
-        mask_spin = (t >= 0.35) & (t < 0.7)
-        t_spin = (t[mask_spin] - 0.35) / 0.35
+        # PHYSICS FIX: Start spinning AT START OF JUMP (0.25)
+        # We start rotation exactly when the robot begins extending its legs (0.25).
+        # This allows it to generate angular momentum against the ground.
+        mask_spin = (t >= 0.25) & (t < 0.7)
+        t_spin = (t[mask_spin] - 0.25) / 0.45
         target_p[mask_spin] = -2 * np.pi * t_spin
 
-        # Landing Phase - Enforce flat
+        # Landing Phase (Flat)
         mask_post_spin = (t >= 0.7)
         target_p[mask_post_spin] = -2 * np.pi
 

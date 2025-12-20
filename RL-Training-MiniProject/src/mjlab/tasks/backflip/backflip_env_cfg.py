@@ -2,8 +2,8 @@
 
 import math
 from copy import deepcopy
-
 import torch
+
 from mjlab.entity.entity import EntityCfg
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp.actions import JointPositionActionCfg
@@ -27,40 +27,25 @@ from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.viewer import ViewerConfig
 
 # --- HELPER FUNCTIONS ---
-def ramp_pitch_air(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """
-    Rewards Pitch Velocity (Backflip Rotation) scaled by Height.
 
-    Mechanism:
-    - Ground (h < 0.3m): Reward is 0. (Don't try to spin on the ground).
-    - Air (h > 0.3m): Reward ramps up linearly with height.
-    - Direction: Rewards NEGATIVE pitch velocity (Backflip).
-    """
-    robot = env.scene[asset_cfg.name]
-
-    # 1. Get Height Factor (0.0 on ground, 1.0 at 0.6m height)
-    base_height = robot.data.root_link_pos_w[:, 2]
-    # Map [0.3, 0.6] -> [0.0, 1.0]
-    height_factor = torch.clamp((base_height - 0.3) / 0.3, 0.0, 1.0)
-
-    # 2. Get Pitch Velocity (Y-axis angular velocity)
-    # We want negative pitch (backflip).
-    # We clamp it so we don't reward spinning forward (front flip).
-    pitch_vel = robot.data.root_link_ang_vel_b[:, 1]
-    backflip_vel = torch.clamp(-pitch_vel, min=0.0) # Only reward backflip direction
-
-    # 3. Combine
-    return backflip_vel * height_factor
 def z_vel_reward(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """
-    Reward vertical velocity in the WORLD frame.
-    Crucial for backflips so the robot pushes 'up' relative to gravity,
-    regardless of its current body rotation.
-    """
-    # Access the robot entity
+    """Reward vertical velocity in the WORLD frame."""
     robot = env.scene[asset_cfg.name]
-    # root_link_lin_vel_w is [num_envs, 3] in World Frame
     return robot.data.root_link_lin_vel_w[:, 2]
+
+def ramp_pitch_air(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Rewards Pitch Velocity (Backflip) scaled by Height."""
+    robot = env.scene[asset_cfg.name]
+    base_height = robot.data.root_link_pos_w[:, 2]
+    height_factor = torch.clamp((base_height - 0.3) / 0.3, 0.0, 1.0)
+    pitch_vel = robot.data.root_link_ang_vel_b[:, 1]
+    backflip_vel = torch.clamp(-pitch_vel, min=0.0)
+    return backflip_vel * height_factor
+
+def penalize_roll_heavy(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Heavily penalize ANY roll velocity."""
+    robot = env.scene[asset_cfg.name]
+    return -1.0 * torch.square(robot.data.root_link_ang_vel_b[:, 0])
 
 # --- SCENE CONFIGURATION ---
 SCENE_CFG = SceneCfg(
@@ -111,8 +96,8 @@ def create_backflip_env_cfg(
     "joint_pos": JointPositionActionCfg(
       asset_name="robot",
       actuator_names=(".*",),
-      # Scale 0.6 is the sweet spot for Go2 backflips
-      scale=0.6,
+      # Scale 1.0: MAX POWER required for backflip
+      scale=1.0,
       use_default_offset=True,
     )
   }
@@ -123,7 +108,8 @@ def create_backflip_env_cfg(
       asset_name="robot",
       cycle_time=2.0,
       resampling_time_range=(3.0, 5.0),
-      ranges=mdp.BackflipCommandCfg.Ranges(jump_height=(0.5, 0.7)),
+      # High minimum jump to ensure safety
+      ranges=mdp.BackflipCommandCfg.Ranges(jump_height=(0.7, 0.8)),
       debug_vis=True,
     )
   }
@@ -207,47 +193,48 @@ def create_backflip_env_cfg(
 
   # --- REWARDS ---
   rewards = {
-    # 1. Height Tracking (Keep high)
     "track_height": RewardTermCfg(
         func=mdp.track_base_height,
         weight=20.0,
         params={"std": 0.2, "command_name": "backflip_ref"},
     ),
-
-    # 2. Base Pitch Tracking (Target Position)
-    # Reduced slightly to let the dynamic "ramping" reward take over the explosive part
     "track_pitch": RewardTermCfg(
         func=mdp.track_base_pitch,
-        weight=10.0,
+        weight=30.0, # High priority: Spin or Fail
         params={"std": 0.2, "command_name": "backflip_ref"},
     ),
-
-    # 3. NEW: Ramping Pitch Reward (The "Spin Harder in Air" Reward)
-    # Uses the function defined above
     "ramp_pitch": RewardTermCfg(
         func=ramp_pitch_air,
-        weight=5.0, # Strong incentive to spin when airborne
+        weight=10.0, # High priority: Spin fast in air
         params={},
     ),
-
-    # 4. Explosive Jump (World Z Velocity)
     "jump_velocity": RewardTermCfg(
         func=z_vel_reward,
-        weight=2.0,
+        weight=5.0,
+        params={},
+    ),
+    "prevent_roll": RewardTermCfg(
+        func=penalize_roll_heavy,
+        weight=5.0,
         params={},
     ),
 
-    # 5. Anti-Belly-Flop
+    # Anti-Drift: Penalize backward jumping strongly (-2.0)
+    "penalize_xy_drift": RewardTermCfg(
+        func=mdp.penalize_xy_velocity,
+        weight=-2.0,
+    ),
+
+    # Body collision penalty (keeps robot trying to tuck)
     "body_collision": RewardTermCfg(
         func=mdp.illegal_contact,
-        weight=-2.0,
+        weight=-1.0,
         params={"sensor_name": self_collision_sensor_cfg.name},
     ),
 
-    # ... (Keep stability rewards: penalize_xy_drift, etc.) ...
-    "penalize_xy_drift": RewardTermCfg(
-        func=mdp.penalize_xy_velocity,
-        weight=-0.5,
+    "action_rate": RewardTermCfg(
+        func=mdp.action_rate_l2,
+        weight=-0.005,
     ),
     "penalize_yaw_spin": RewardTermCfg(
         func=mdp.penalize_yaw_velocity,
@@ -271,6 +258,12 @@ def create_backflip_env_cfg(
       func=mdp.time_out,
       time_out=True,
     ),
+    # RE-ENABLED: Force the robot to respect the ground
+    "illegal_contact": TerminationTermCfg(
+        func=mdp.illegal_contact,
+        params={"sensor_name": self_collision_sensor_cfg.name},
+        time_out=False,
+    )
   }
 
   return ManagerBasedRlEnvCfg(
@@ -284,5 +277,5 @@ def create_backflip_env_cfg(
     sim=SIM_CFG,
     viewer=viewer,
     decimation=4,
-    episode_length_s=5.0,
+    episode_length_s=2.5,
   )
