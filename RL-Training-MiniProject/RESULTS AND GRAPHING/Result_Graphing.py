@@ -11,7 +11,7 @@ problem3_folder = os.path.join(script_dir, "Problem 3")
 PRB1_PATH = os.path.join(problem1_folder, "events.out.tfevents.1766105278.677a1d26499e.1464.0")
 PRB2_PATH = os.path.join(problem2_folder, "events.out.tfevents.1766103354.d55c2424f1bd.13450.0")
 PRB2_NOOBS_PATH = os.path.join(problem2_noObs_folder, "events.out.tfevents.1766133570.c23b4d174978.5433.0")
-PRB3_PATH = os.path.join(problem3_folder, "ray_simulation.xml")
+PRB3_PATH = os.path.join(problem3_folder, "events.out.tfevents.1766218113.DESKTOP-S8D8S2U.58555.0")
 
 file_path = PRB1_PATH
 
@@ -22,7 +22,6 @@ event_acc.Reload()
 
 # 2. Extract available tags
 tags = event_acc.Tags()['scalars']
-print(tags)
 
 # 3. Define Tags
 reward_tag = 'Train/mean_reward'
@@ -171,4 +170,44 @@ plt.grid(True, alpha=0.3)
 
 
 plt.tight_layout()
+
+#----------------------------------------------------------------------------------------------
+# PROBLEM 3
+file_path = PRB3_PATH
+
+# 1. Load the data
+event_acc = EventAccumulator(file_path)
+event_acc.Reload()
+
+# Mean Reward
+r_events = event_acc.Scalars(reward_tag)
+r_steps3 = [e.step for e in r_events]
+r_values3 = [e.value for e in r_events]
+
+# Episode Length
+l_events = event_acc.Scalars(length_tag)
+l_steps3 = [e.step for e in l_events]
+l_values3 = [e.value for e in l_events]
+
+plt.figure(figsize=(10, 8))
+
+# Subplot 1: Mean Reward
+plt.subplot(2, 1, 1)
+plt.plot(r_steps3, r_values3, color='#1f77b4', linewidth=2)
+plt.title(f'Mean Reward')
+plt.ylabel('Reward')
+plt.grid(True, alpha=0.3)
+# Hide x-labels for the top plot to avoid clutter
+plt.gca().axes.xaxis.set_ticklabels([])
+
+# Subplot 2: Episode Length
+plt.subplot(2, 1, 2)
+plt.plot(l_steps3, l_values3, color='#ff7f0e', linewidth=2)
+plt.title(f'Episode Length')
+plt.ylabel('Length')
+plt.xlabel('Steps')
+plt.grid(True, alpha=0.3)
+
+plt.tight_layout()
+
 plt.show()
