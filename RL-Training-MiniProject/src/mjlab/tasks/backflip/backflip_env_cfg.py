@@ -3,6 +3,7 @@
 import math
 from copy import deepcopy
 
+import torch
 from mjlab.entity.entity import EntityCfg
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp.actions import JointPositionActionCfg
@@ -19,16 +20,52 @@ from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.scene import SceneCfg
 from mjlab.sensor import ContactSensorCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
-from mjlab.tasks.backflip import mdp 
+from mjlab.tasks.backflip import mdp
 from mjlab.terrains import TerrainImporterCfg
 from mjlab.terrains.config import ROUGH_TERRAINS_CFG
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.viewer import ViewerConfig
 
+# --- HELPER FUNCTIONS ---
+def ramp_pitch_air(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """
+    Rewards Pitch Velocity (Backflip Rotation) scaled by Height.
+
+    Mechanism:
+    - Ground (h < 0.3m): Reward is 0. (Don't try to spin on the ground).
+    - Air (h > 0.3m): Reward ramps up linearly with height.
+    - Direction: Rewards NEGATIVE pitch velocity (Backflip).
+    """
+    robot = env.scene[asset_cfg.name]
+
+    # 1. Get Height Factor (0.0 on ground, 1.0 at 0.6m height)
+    base_height = robot.data.root_link_pos_w[:, 2]
+    # Map [0.3, 0.6] -> [0.0, 1.0]
+    height_factor = torch.clamp((base_height - 0.3) / 0.3, 0.0, 1.0)
+
+    # 2. Get Pitch Velocity (Y-axis angular velocity)
+    # We want negative pitch (backflip).
+    # We clamp it so we don't reward spinning forward (front flip).
+    pitch_vel = robot.data.root_link_ang_vel_b[:, 1]
+    backflip_vel = torch.clamp(-pitch_vel, min=0.0) # Only reward backflip direction
+
+    # 3. Combine
+    return backflip_vel * height_factor
+def z_vel_reward(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """
+    Reward vertical velocity in the WORLD frame.
+    Crucial for backflips so the robot pushes 'up' relative to gravity,
+    regardless of its current body rotation.
+    """
+    # Access the robot entity
+    robot = env.scene[asset_cfg.name]
+    # root_link_lin_vel_w is [num_envs, 3] in World Frame
+    return robot.data.root_link_lin_vel_w[:, 2]
+
 # --- SCENE CONFIGURATION ---
 SCENE_CFG = SceneCfg(
   terrain=TerrainImporterCfg(
-    terrain_type="plane", 
+    terrain_type="plane",
   ),
   num_envs=1,
   extent=2.0,
@@ -61,11 +98,11 @@ def create_backflip_env_cfg(
   feet_sensor_cfg: ContactSensorCfg,
   self_collision_sensor_cfg: ContactSensorCfg,
 ) -> ManagerBasedRlEnvCfg:
-  
+
   scene = deepcopy(SCENE_CFG)
   scene.entities = {"robot": robot_cfg}
   scene.sensors = (feet_sensor_cfg, self_collision_sensor_cfg)
-  
+
   viewer = deepcopy(VIEWER_CONFIG)
   viewer.body_name = viewer_body_name
 
@@ -74,18 +111,18 @@ def create_backflip_env_cfg(
     "joint_pos": JointPositionActionCfg(
       asset_name="robot",
       actuator_names=(".*",),
-      # Scale 0.8 is critical for explosive movement (Backflip needs this high)
-      scale=0.8,  
+      # Scale 0.6 is the sweet spot for Go2 backflips
+      scale=0.6,
       use_default_offset=True,
     )
   }
 
   # --- COMMANDS ---
   commands: dict[str, CommandTermCfg] = {
-    "backflip_ref": mdp.BackflipCommandCfg( 
+    "backflip_ref": mdp.BackflipCommandCfg(
       asset_name="robot",
-      # Note: Ensure your backflip_command.py has cycle_time=2.0 as discussed
-      resampling_time_range=(3.0, 5.0), 
+      cycle_time=2.0,
+      resampling_time_range=(3.0, 5.0),
       ranges=mdp.BackflipCommandCfg.Ranges(jump_height=(0.5, 0.7)),
       debug_vis=True,
     )
@@ -126,14 +163,13 @@ def create_backflip_env_cfg(
 
   observations = {
     "policy": ObservationGroupCfg(
-        terms=policy_terms, 
-        concatenate_terms=True, 
-        # Disable noise so the robot can sense precise timing
-        enable_corruption=False 
+        terms=policy_terms,
+        concatenate_terms=True,
+        enable_corruption=False
     ),
     "critic": ObservationGroupCfg(
-        terms=critic_terms, 
-        concatenate_terms=True, 
+        terms=critic_terms,
+        concatenate_terms=True,
         enable_corruption=False
     ),
   }
@@ -144,7 +180,7 @@ def create_backflip_env_cfg(
       func=mdp.reset_root_state_uniform,
       mode="reset",
       params={
-        "pose_range": {"x": (-0.1, 0.1), "y": (-0.1, 0.1), "yaw": (-0.1, 0.1)}, 
+        "pose_range": {"x": (-0.1, 0.1), "y": (-0.1, 0.1), "yaw": (-0.1, 0.1)},
         "velocity_range": {},
       },
     ),
@@ -160,55 +196,61 @@ def create_backflip_env_cfg(
     "foot_friction": EventTermCfg(
       mode="startup",
       func=mdp.randomize_field,
-      domain_randomization=False,
+      domain_randomization=True,
       params={
         "asset_cfg": SceneEntityCfg("robot", geom_names=".*"),
         "field": "geom_friction",
-        "ranges": (0.9, 1.0),
+        "ranges": (0.5, 1.0),
       }
     ),
   }
 
   # --- REWARDS ---
   rewards = {
-    # 1. Primary Task: High Weights to force the jump
+    # 1. Height Tracking (Keep high)
     "track_height": RewardTermCfg(
-        func=mdp.track_base_height, 
-        weight=15.0,
+        func=mdp.track_base_height,
+        weight=20.0,
         params={"std": 0.2, "command_name": "backflip_ref"},
     ),
+
+    # 2. Base Pitch Tracking (Target Position)
+    # Reduced slightly to let the dynamic "ramping" reward take over the explosive part
     "track_pitch": RewardTermCfg(
-        func=mdp.track_base_pitch, 
-        weight=15.0,
+        func=mdp.track_base_pitch,
+        weight=10.0,
         params={"std": 0.2, "command_name": "backflip_ref"},
     ),
 
-    # 2. Collision Penalty (The Anti-Belly-Flop Reward)
-    # FIX APPLIED: Removed 'threshold' parameter
+    # 3. NEW: Ramping Pitch Reward (The "Spin Harder in Air" Reward)
+    # Uses the function defined above
+    "ramp_pitch": RewardTermCfg(
+        func=ramp_pitch_air,
+        weight=5.0, # Strong incentive to spin when airborne
+        params={},
+    ),
+
+    # 4. Explosive Jump (World Z Velocity)
+    "jump_velocity": RewardTermCfg(
+        func=z_vel_reward,
+        weight=2.0,
+        params={},
+    ),
+
+    # 5. Anti-Belly-Flop
     "body_collision": RewardTermCfg(
-        func=mdp.illegal_contact, 
-        weight=-5.0,
-        params={"sensor_name": self_collision_sensor_cfg.name}, 
+        func=mdp.illegal_contact,
+        weight=-2.0,
+        params={"sensor_name": self_collision_sensor_cfg.name},
     ),
 
-    "feet_airborne": RewardTermCfg(
-        func=mdp.feet_airborne,
-        weight=5.0,  # Positive weight to encourage jumping
-        params={"sensor_name": feet_sensor_cfg.name},
-    ),
-
-    # 3. Stability / Orientation
-    # Helps the robot land flat instead of sideways/tilted
-    "flat_orientation": RewardTermCfg(
-        func=mdp.flat_orientation_l2,
-        weight=-1.0,
-    ),
+    # ... (Keep stability rewards: penalize_xy_drift, etc.) ...
     "penalize_xy_drift": RewardTermCfg(
-        func=mdp.penalize_xy_velocity, 
+        func=mdp.penalize_xy_velocity,
         weight=-0.5,
     ),
     "penalize_yaw_spin": RewardTermCfg(
-        func=mdp.penalize_yaw_velocity, 
+        func=mdp.penalize_yaw_velocity,
         weight=-0.5,
     ),
     "soft_landing": RewardTermCfg(
@@ -216,11 +258,9 @@ def create_backflip_env_cfg(
         weight=-1.0,
         params={"sensor_name": feet_sensor_cfg.name},
     ),
-    
-    # 4. Limits (Low penalty to allow full extension)
     "dof_pos_limits": RewardTermCfg(
-        func=mdp.joint_pos_limits, 
-        weight=-0.2, 
+        func=mdp.joint_pos_limits,
+        weight=-0.2,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
     ),
   }
@@ -231,8 +271,6 @@ def create_backflip_env_cfg(
       func=mdp.time_out,
       time_out=True,
     ),
-    # DISABLED: illegal_contact termination so we don't reset mid-flip
-    # The 'body_collision' reward above handles the punishment now.
   }
 
   return ManagerBasedRlEnvCfg(
@@ -246,5 +284,5 @@ def create_backflip_env_cfg(
     sim=SIM_CFG,
     viewer=viewer,
     decimation=4,
-    episode_length_s=5.0, 
+    episode_length_s=5.0,
   )
