@@ -2,10 +2,7 @@
 
 from copy import deepcopy
 
-# --- CHANGE 1: Update Imports for Go2 ---
-# Ensure these exist in your mjlab.asset_zoo.robots file.
-# If GO2_ACTION_SCALE is missing, you can temporarily use GO1_ACTION_SCALE
-# or define a new one (typically around 0.25 - 0.5 for Go2).
+
 from mjlab.asset_zoo.robots import (
   GO2_ACTION_SCALE,
   get_go2_robot_cfg,
@@ -22,12 +19,10 @@ from mjlab.utils.retval import retval
 def UNITREE_GO2_ROUGH_ENV_CFG() -> ManagerBasedRlEnvCfg:
   """Create Unitree Go2 Backflip configuration."""
   
-  # 1. Define Robot Geometry/Sensors
   foot_names = ("FR", "FL", "RR", "RL")
   site_names = ("FR", "FL", "RR", "RL")
   geom_names = tuple(f"{name}_foot_collision" for name in foot_names)
 
-  # Sensors
   feet_ground_cfg = ContactSensorCfg(
     name="feet_ground_contact",
     primary=ContactMatch(mode="geom", pattern=geom_names, entity="robot"),
@@ -43,9 +38,7 @@ def UNITREE_GO2_ROUGH_ENV_CFG() -> ManagerBasedRlEnvCfg:
     primary=ContactMatch(
       mode="geom",
       entity="robot",
-      # Grab all collision geoms...
       pattern=r".*_collision\d*$",
-      # Except for the foot geoms.
       exclude=tuple(geom_names),
     ),
     secondary=ContactMatch(mode="body", pattern="terrain"),
@@ -54,9 +47,6 @@ def UNITREE_GO2_ROUGH_ENV_CFG() -> ManagerBasedRlEnvCfg:
     num_slots=1,
   )
 
-  # 2. Call the Backflip Factory
-  # Note: We removed posture_std_standing/walking/running arguments 
-  # because they are not needed for this ballistic task.
   cfg = create_backflip_env_cfg(
     robot_cfg=get_go2_robot_cfg(),
     action_scale=GO2_ACTION_SCALE,
@@ -65,8 +55,6 @@ def UNITREE_GO2_ROUGH_ENV_CFG() -> ManagerBasedRlEnvCfg:
     feet_sensor_cfg=feet_ground_cfg,
     self_collision_sensor_cfg=nonfoot_ground_cfg,
   )
-
-  # 3. Final Overrides (Optional)
   cfg.viewer = deepcopy(VIEWER_CONFIG)
   cfg.viewer.body_name = "trunk"
   cfg.viewer.distance = 1.5

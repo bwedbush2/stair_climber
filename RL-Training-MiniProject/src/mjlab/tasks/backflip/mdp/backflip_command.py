@@ -21,10 +21,7 @@ if TYPE_CHECKING:
 
 
 class BackflipCommand(CommandTerm):
-    """
-    Command generator for a backflip trajectory.
-    Outputs a 2D command: [Target Base Height, Target Base Pitch]
-    """
+
     cfg: BackflipCommandCfg
 
     def __init__(self, cfg: BackflipCommandCfg, env: ManagerBasedRlEnv):
@@ -60,32 +57,28 @@ class BackflipCommand(CommandTerm):
         self.time_in_cycle = torch.remainder(self.time_in_cycle, self.cfg.cycle_time)
         t = self.time_in_cycle / self.cfg.cycle_time
 
-        # --- 1. Base Height Trajectory ---
         target_h = torch.zeros_like(t)
 
-        # Phase 1: Squat (0.0 to 0.25)
+        # 1: Squat (0.0 to 0.25)
         mask_squat = (t < 0.25)
         target_h[mask_squat] = 0.28 + (0.15 - 0.28) * (t[mask_squat] / 0.25)
 
-        # Phase 2: Air/Jump (0.25 to 0.75)
+        # 2: Air/Jump (0.25 to 0.75)
         mask_air = (t >= 0.25) & (t < 0.75)
         t_air = (t[mask_air] - 0.25) / 0.5
         h_peak = self.target_jump_height[mask_air]
         target_h[mask_air] = 0.15 + (h_peak - 0.15) * 4 * (t_air - t_air ** 2)
 
-        # Phase 3: Land (0.75 to 1.0)
+        # 3: Land (0.75 to 1.0)
         mask_land = (t >= 0.75)
         t_land = (t[mask_land] - 0.75) / 0.25
         target_h[mask_land] = 0.15 + (0.28 - 0.15) * t_land
 
         self.bf_command_b[:, 0] = target_h
 
-        # --- 2. Base Pitch Trajectory ---
+        #Base Pitch Trajectory
         target_p = torch.zeros_like(t)
 
-        # PHYSICS FIX: Start spinning AT START OF JUMP (0.25)
-        # We start rotation exactly when the robot begins extending its legs (0.25).
-        # This allows it to generate angular momentum against the ground.
         mask_spin = (t >= 0.25) & (t < 0.7)
         t_spin = (t[mask_spin] - 0.25) / 0.45
         target_p[mask_spin] = -2 * np.pi * t_spin
@@ -101,7 +94,6 @@ class BackflipCommand(CommandTerm):
         if batch >= self.num_envs: return
         base_pos = self.robot.data.root_link_pos_w[batch].cpu().numpy()
         if np.linalg.norm(base_pos) < 1e-6: return
-        # Visualization placeholder
 
 
 @dataclass(kw_only=True)

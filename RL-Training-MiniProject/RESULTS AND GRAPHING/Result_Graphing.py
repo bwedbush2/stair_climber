@@ -13,17 +13,15 @@ PRB2_PATH = os.path.join(problem2_folder, "events.out.tfevents.1766103354.d55c24
 PRB2_NOOBS_PATH = os.path.join(problem2_noObs_folder, "events.out.tfevents.1766133570.c23b4d174978.5433.0")
 PRB3_PATH = os.path.join(problem3_folder, "events.out.tfevents.1766218113.DESKTOP-S8D8S2U.58555.0")
 
+# --- Problem 1 Setup ---
 file_path = PRB1_PATH
 
-# 1. Load the data
 print(f"Loading {file_path}...")
 event_acc = EventAccumulator(file_path)
 event_acc.Reload()
 
-# 2. Extract available tags
 tags = event_acc.Tags()['scalars']
 
-# 3. Define Tags
 reward_tag = 'Train/mean_reward'
 length_tag = 'Train/mean_episode_length'
 lin_track_tag = 'Episode_Reward/track_linear_velocity'
@@ -32,7 +30,6 @@ lin_err_tag = 'Metrics/twist/error_vel_xy'
 ang_err_tag = 'Metrics/twist/error_vel_yaw'
 slip_metric_tag = 'Metrics/slip_velocity_mean'
 
-# 4. Extract Data Explicitly
 # Mean Reward
 r_events = event_acc.Scalars(reward_tag)
 r_steps = [e.step for e in r_events]
@@ -63,19 +60,16 @@ ae_events = event_acc.Scalars(ang_err_tag)
 ae_steps = [e.step for e in ae_events]
 ae_values = [e.value for e in ae_events]
 
-# --- FIGURE 1: Reward + Length ---
+# --- Figure 1: Reward + Length ---
 plt.figure(figsize=(10, 8))
 
-# Subplot 1: Mean Reward
 plt.subplot(2, 1, 1)
 plt.plot(r_steps, r_values, color='#1f77b4', linewidth=2)
 plt.title(f'Mean Reward')
 plt.ylabel('Reward')
 plt.grid(True, alpha=0.3)
-# Hide x-labels for the top plot to avoid clutter
 plt.gca().axes.xaxis.set_ticklabels([])
 
-# Subplot 2: Episode Length
 plt.subplot(2, 1, 2)
 plt.plot(l_steps, l_values, color='#ff7f0e', linewidth=2)
 plt.title(f'Episode Length')
@@ -85,10 +79,9 @@ plt.grid(True, alpha=0.3)
 
 plt.tight_layout()
 
-# --- FIGURE 2: Tracking Rewards + Metrics ---
+# --- Figure 2: Tracking Rewards + Metrics ---
 plt.figure(figsize=(10, 8))
 
-# Subplot 1: Tracking Rewards (Linear & Angular)
 plt.subplot(2, 1, 1)
 plt.plot(lt_steps, lt_values, label='Linear Velocity Reward', linewidth=2)
 plt.plot(at_steps, at_values, label='Angular Velocity Reward', linewidth=2)
@@ -96,10 +89,8 @@ plt.title('Tracking Rewards')
 plt.ylabel('Reward')
 plt.legend()
 plt.grid(True, alpha=0.3)
-# Hide x-labels for the top plot
 plt.gca().axes.xaxis.set_ticklabels([])
 
-# Subplot 2: Velocity Errors (Linear & Angular)
 plt.subplot(2, 1, 2)
 plt.plot(le_steps, le_values, label='Linear Velocity Error', linewidth=2)
 plt.plot(ae_steps, ae_values, label='Angular Velocity Error', linewidth=2)
@@ -111,15 +102,11 @@ plt.grid(True, alpha=0.3)
 
 plt.tight_layout()
 
-#----------------------------------------------------------------------------------------------
-# PROBLEM 2
+# --- Problem 2 Setup ---
 file_path = PRB2_PATH
 
-# 1. Load the data
 event_acc = EventAccumulator(file_path)
 event_acc.Reload()
-
-# 2. Extract available tags
 
 tags = event_acc.Tags()['scalars']
 slip_events = event_acc.Scalars(slip_metric_tag)
@@ -132,11 +119,9 @@ le_values2 = [e.value for e in le_events]
 
 file_path = PRB2_NOOBS_PATH
 
-# 1. Load the data
 event_acc = EventAccumulator(file_path)
 event_acc.Reload()
 
-# 2. Extract available tags
 tags = event_acc.Tags()['scalars']
 slip_events = event_acc.Scalars(slip_metric_tag)
 slip_steps1 = [e.step for e in slip_events]
@@ -148,7 +133,6 @@ le_values1 = [e.value for e in le_events]
 
 plt.figure(figsize=(10, 8))
 
-# Subplot 1: Foot Slip Metric
 plt.subplot(2, 1, 1)
 plt.plot(slip_steps1, slip_values1, label='Without Critic Observations', linewidth=2)
 plt.plot(slip_steps2, slip_values2, label='With Critic Observations', linewidth=2)
@@ -158,7 +142,6 @@ plt.legend()
 plt.grid(True, alpha=0.3)
 plt.gca().axes.xaxis.set_ticklabels([])
 
-# Subplot 2: Tracking Performance (Re-plotted for context)
 plt.subplot(2, 1, 2)
 plt.plot(le_steps1, le_values1, label='Without Critic Observations', linewidth=2)
 plt.plot(le_steps2, le_values2, label='With Critic Observations', linewidth=2)
@@ -168,14 +151,11 @@ plt.xlabel('Steps')
 plt.legend()
 plt.grid(True, alpha=0.3)
 
-
 plt.tight_layout()
 
-#----------------------------------------------------------------------------------------------
-# PROBLEM 3
+#Problem 3 Setup
 file_path = PRB3_PATH
 
-# 1. Load the data
 event_acc = EventAccumulator(file_path)
 event_acc.Reload()
 
@@ -191,16 +171,13 @@ l_values3 = [e.value for e in l_events]
 
 plt.figure(figsize=(10, 8))
 
-# Subplot 1: Mean Reward
 plt.subplot(2, 1, 1)
 plt.plot(r_steps3, r_values3, color='#1f77b4', linewidth=2)
 plt.title(f'Mean Reward')
 plt.ylabel('Reward')
 plt.grid(True, alpha=0.3)
-# Hide x-labels for the top plot to avoid clutter
 plt.gca().axes.xaxis.set_ticklabels([])
 
-# Subplot 2: Episode Length
 plt.subplot(2, 1, 2)
 plt.plot(l_steps3, l_values3, color='#ff7f0e', linewidth=2)
 plt.title(f'Episode Length')

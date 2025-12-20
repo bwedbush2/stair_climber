@@ -26,22 +26,14 @@ def track_base_height(
     command_name: str,
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
 ) -> torch.Tensor:
-    """
-    Reward for tracking the desired base height trajectory.
-    Crucial for the takeoff and landing phases.
-    """
     asset: Entity = env.scene[asset_cfg.name]
-    # Get the desired height from the command generator
     command = env.command_manager.get_command(command_name)
     # INDEX 0 IS HEIGHT
     target_height = command[:, 0]
     assert target_height is not None, f"Command '{command_name}' not found."
     
-    # Get current height (z-position)
     current_height = asset.data.root_link_pos_w[:, 2]
-    
-    # Calculate error
-    # We assume command is a scalar [Batch, 1] or [Batch]
+
     if target_height.dim() > 1:
         target_height = target_height.squeeze(-1)
         
@@ -55,23 +47,14 @@ def track_base_pitch(
     command_name: str,
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
 ) -> torch.Tensor:
-    """
-    Reward for tracking the desired pitch (orientation).
-    This guides the robot through the rotation of the backflip.
-    """
     asset: Entity = env.scene[asset_cfg.name]
     command = env.command_manager.get_command(command_name)
     # INDEX 1 IS PITCH
     target_pitch = command[:, 1]
     assert target_pitch is not None, f"Command '{command_name}' not found."
     
-    # Get current pitch from quaternion
     quat = asset.data.root_link_quat_w
-    # Convert to Euler (roll, pitch, yaw)
     _, pitch, _ = euler_xyz_from_quat(quat)
-    
-    # Handle wrapping if necessary, though for a single backflip 
-    # tracking the raw pitch trajectory usually suffices if generated correctly.
     if target_pitch.dim() > 1:
         target_pitch = target_pitch.squeeze(-1)
 
@@ -83,9 +66,7 @@ def penalize_xy_velocity(
     env: ManagerBasedRlEnv,
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
 ) -> torch.Tensor:
-    """
-    Penalize horizontal drift. A backflip should be mostly vertical.
-    """
+
     asset: Entity = env.scene[asset_cfg.name]
     vel_xy = asset.data.root_link_lin_vel_w[:, :2]
     return torch.sum(torch.square(vel_xy), dim=1)
@@ -95,9 +76,6 @@ def penalize_yaw_velocity(
     env: ManagerBasedRlEnv,
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
 ) -> torch.Tensor:
-    """
-    Penalize yaw rotation. The robot should only rotate in Pitch.
-    """
     asset: Entity = env.scene[asset_cfg.name]
     ang_vel_z = asset.data.root_link_ang_vel_w[:, 2]
     return torch.square(ang_vel_z)
@@ -179,23 +157,11 @@ def feet_airborne(
     env: ManagerBasedRlEnv,
     sensor_name: str,
 ) -> torch.Tensor:
-    """
-    Rewards the robot when all feet are off the ground (flight phase).
-    This encourages the robot to jump high and tuck its legs.
-    """
     contact_sensor: ContactSensor = env.scene[sensor_name]
-    
-    # Get contact forces [num_envs, num_feet, 3]
     forces = contact_sensor.data.force
-    
-    # Calculate force magnitude per foot
+  
     force_mags = torch.norm(forces, dim=-1)
-    
-    # Check if feet are touching the ground (Force > 1.0 Newton)
     in_contact = force_mags > 1.0
-    
-    # Count how many feet are in contact
     num_contacts = torch.sum(in_contact.float(), dim=1)
-    
-    # Reward 1.0 if NO feet are touching the ground
+
     return (num_contacts == 0).float()

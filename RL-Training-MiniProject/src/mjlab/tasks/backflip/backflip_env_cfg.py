@@ -1,5 +1,3 @@
-"""Backflip task configuration for Unitree Go2."""
-
 import math
 from copy import deepcopy
 import torch
@@ -26,15 +24,11 @@ from mjlab.terrains.config import ROUGH_TERRAINS_CFG
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.viewer import ViewerConfig
 
-# --- HELPER FUNCTIONS ---
-
 def z_vel_reward(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Reward vertical velocity in the WORLD frame."""
     robot = env.scene[asset_cfg.name]
     return robot.data.root_link_lin_vel_w[:, 2]
 
 def ramp_pitch_air(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Rewards Pitch Velocity (Backflip) scaled by Height."""
     robot = env.scene[asset_cfg.name]
     base_height = robot.data.root_link_pos_w[:, 2]
     height_factor = torch.clamp((base_height - 0.3) / 0.3, 0.0, 1.0)
@@ -43,14 +37,12 @@ def ramp_pitch_air(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> 
     return backflip_vel * height_factor
 
 def penalize_roll_heavy(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Heavily penalize ANY roll velocity."""
     robot = env.scene[asset_cfg.name]
     return -1.0 * torch.square(robot.data.root_link_ang_vel_b[:, 0])
 
-# --- SCENE CONFIGURATION ---
 SCENE_CFG = SceneCfg(
   terrain=TerrainImporterCfg(
-    terrain_type="plane",
+    terrain_type="generator",
   ),
   num_envs=1,
   extent=2.0,
@@ -91,30 +83,25 @@ def create_backflip_env_cfg(
   viewer = deepcopy(VIEWER_CONFIG)
   viewer.body_name = viewer_body_name
 
-  # --- ACTIONS ---
   actions: dict[str, ActionTermCfg] = {
     "joint_pos": JointPositionActionCfg(
       asset_name="robot",
       actuator_names=(".*",),
-      # Scale 1.0: MAX POWER required for backflip
       scale=1.0,
       use_default_offset=True,
     )
   }
 
-  # --- COMMANDS ---
   commands: dict[str, CommandTermCfg] = {
     "backflip_ref": mdp.BackflipCommandCfg(
       asset_name="robot",
       cycle_time=2.0,
       resampling_time_range=(3.0, 5.0),
-      # High minimum jump to ensure safety
       ranges=mdp.BackflipCommandCfg.Ranges(jump_height=(0.7, 0.8)),
       debug_vis=True,
     )
   }
 
-  # --- OBSERVATIONS ---
   policy_terms: dict[str, ObservationTermCfg] = {
     "joint_pos": ObservationTermCfg(
       func=mdp.joint_pos_rel,
@@ -160,7 +147,6 @@ def create_backflip_env_cfg(
     ),
   }
 
-  # --- EVENTS ---
   events = {
     "reset_base": EventTermCfg(
       func=mdp.reset_root_state_uniform,
@@ -191,7 +177,6 @@ def create_backflip_env_cfg(
     ),
   }
 
-  # --- REWARDS ---
   rewards = {
     "track_height": RewardTermCfg(
         func=mdp.track_base_height,
@@ -200,12 +185,12 @@ def create_backflip_env_cfg(
     ),
     "track_pitch": RewardTermCfg(
         func=mdp.track_base_pitch,
-        weight=30.0, # High priority: Spin or Fail
+        weight=30.0,
         params={"std": 0.2, "command_name": "backflip_ref"},
     ),
     "ramp_pitch": RewardTermCfg(
         func=ramp_pitch_air,
-        weight=10.0, # High priority: Spin fast in air
+        weight=10.0,
         params={},
     ),
     "jump_velocity": RewardTermCfg(
@@ -218,20 +203,15 @@ def create_backflip_env_cfg(
         weight=5.0,
         params={},
     ),
-
-    # Anti-Drift: Penalize backward jumping strongly (-2.0)
     "penalize_xy_drift": RewardTermCfg(
         func=mdp.penalize_xy_velocity,
         weight=-2.0,
     ),
-
-    # Body collision penalty (keeps robot trying to tuck)
     "body_collision": RewardTermCfg(
         func=mdp.illegal_contact,
         weight=-1.0,
         params={"sensor_name": self_collision_sensor_cfg.name},
     ),
-
     "action_rate": RewardTermCfg(
         func=mdp.action_rate_l2,
         weight=-0.005,
@@ -252,13 +232,11 @@ def create_backflip_env_cfg(
     ),
   }
 
-  # --- TERMINATIONS ---
   terminations = {
     "time_out": TerminationTermCfg(
       func=mdp.time_out,
       time_out=True,
     ),
-    # RE-ENABLED: Force the robot to respect the ground
     "illegal_contact": TerminationTermCfg(
         func=mdp.illegal_contact,
         params={"sensor_name": self_collision_sensor_cfg.name},
