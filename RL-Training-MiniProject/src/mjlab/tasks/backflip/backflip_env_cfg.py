@@ -160,11 +160,11 @@ def create_backflip_env_cfg(
     "foot_friction": EventTermCfg(
       mode="startup",
       func=mdp.randomize_field,
-      domain_randomization=True,
+      domain_randomization=False,
       params={
         "asset_cfg": SceneEntityCfg("robot", geom_names=".*"),
         "field": "geom_friction",
-        "ranges": (0.5, 1.0),
+        "ranges": (0.9, 1.0),
       }
     ),
   }
