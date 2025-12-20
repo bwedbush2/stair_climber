@@ -482,10 +482,19 @@ def run_simulation(scene: int, rl_agent=None):
             robot_x = data.qpos[0]
             robot_y = data.qpos[1]
             
+            body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "car")
+            # World rotation matrix of body (3x3), stored flat in row-major order
+            R_flat = data.xmat[body_id].copy()
+            R = R_flat.reshape(3, 3)
+            # Heading is body x-axis in world frame
+            heading = R[:, 0]
+            robot_yaw = np.arctan2(heading[1], heading[0]) 
+
             telemetry_log.append({
                 "time": data.time,
                 "x": robot_x,
                 "y": robot_y,
+                "yaw": robot_yaw,
                 "actuators": actuator_vals.tolist()
             })
 
@@ -524,10 +533,10 @@ def run_simulation(scene: int, rl_agent=None):
         print(f"Writing telemetry to: {file_path}")
         try:
             with open(file_path, "w") as f:
-                f.write("Time, X, Y, Drive_Fwd, Drive_Turn, Climb, Level_Bin\n")
+                f.write("Time, X, Y, Yaw, Drive_Fwd, Drive_Turn, Climb, Level_Bin\n")
                 for entry in telemetry_log:
                     acts = ", ".join([f"{v:.4f}" for v in entry['actuators']])
-                    line = f"{entry['time']:.4f}, {entry['x']:.4f}, {entry['y']:.4f}, {acts}\n"
+                    line = f"{entry['time']:.4f}, {entry['x']:.4f}, {entry['y']:.4f}, {entry['yaw']:.4f}, {acts}\n"
                     f.writelines(line)
             print("Data saved successfully.")
         except Exception as e:

@@ -62,7 +62,10 @@ def create_path(model, data, scene: int) -> list[tuple[float, float]]:
         ],
         4: [
             (x0, y0, 2),       # start pos
+            (5.3, 0.0, 2),
             (5.5, 0.0, 2),     # down the ramp
+            (5.5, -1.0, 2),
+            (5.5, -3.3, 2),
             (5.5, -3.5, 2),    # up the curb
             
             # --- HOUSE 1 (x=4) ---

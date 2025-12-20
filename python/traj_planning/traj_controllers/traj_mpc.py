@@ -74,16 +74,17 @@ def _solve_cftoc(gam, tau, Ts, dyn_mode, N, x0, xN, xL, xU, uL, uU, bf, Af, xbar
     # -------------------------
     # Objective + weights
     # -------------------------
-    w_xy  = 20.0
-    w_yaw = 5.0
-    w_v   = 0.5
-    w_w   = 0.1
+    w_xy  = 20.0        # cost for x,y stage 
+    w_yaw = 1.0         # cost for yaw stage
+    w_v   = 0.5         # cost for drive input
+    w_w   = 1.0         # cost for turning input
 
-    w_xy_T  = 100.0
-    w_yaw_T = 100.0
+    w_xy_T  = 100.0     # cost for x,y terminal position
+    w_yaw_T = 500.0     # cost for yaw terminal orientation
 
     # desired stage yaw based on current position
     yaw_desired = np.arctan2(xN[1]-x0[1], xN[0]-x0[0])
+    yaw_desired = _nearest_equiv(yaw_desired, x0[2])
 
     model.track_cost = sum(
         w_xy * ((model.x[0, t] - xN[0])**2 + (model.x[1, t] - xN[1])**2)
@@ -406,9 +407,9 @@ def traj_mpc(model, data, path, dt=0.05) -> tuple[float, float] :
 
     x_old = _MPC_WARM["x"]
     u_old = _MPC_WARM["u"]
-    feas, xOpt, uOpt, JOpt = _solve_cftoc(gam, tau, Ts, "nl", N, z0, zf, xL, xU, uL, uU, bf, Af, x_old, u_old)
     # print(f"Current position: ({z0[0]}, {z0[1]}, {z0[2]})")
     # print(f"Target position: ({xt}, {yt}, {yawt})")
+    feas, xOpt, uOpt, JOpt = _solve_cftoc(gam, tau, Ts, "lin", N, z0, zf, xL, xU, uL, uU, bf, Af, x_old, u_old)
     # print("optimal states = ", xOpt)
     # print("optimal inputs = ", uOpt)
     # after you solve and extract xOpt, uOpt:
