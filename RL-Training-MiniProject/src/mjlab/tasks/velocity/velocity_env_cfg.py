@@ -300,7 +300,7 @@ def create_velocity_env_cfg(
     ),
     "track_angular_velocity": RewardTermCfg(
       func= mdp.track_angular_velocity,
-      weight=2.0,
+      weight=4.0,
       params={
         "std": 0.5,
         "command_name": "twist"

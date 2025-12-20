@@ -1,425 +1,92 @@
-"""Velocity tracking task configuration.
+import os
+import sys
+import glob
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Literal
+import torch
+import tyro
+import numpy as np
+import matplotlib.pyplot as plt
+from rsl_rl.runners import OnPolicyRunner
+from mjlab.envs import ManagerBasedRlEnv
+from mjlab.rl import RslRlVecEnvWrapper
+from mjlab.tasks.registry import list_tasks, load_env_cfg, load_rl_cfg
+from mjlab.utils.torch import configure_torch_backends
 
-This module defines the base configuration for velocity tracking tasks.
-Robot-specific configurations are located in the config/ directory.
-"""
+@dataclass(frozen=True)
+class GaitTestConfig:
+    checkpoint_file: str | None = None
+    label: str = "Model" 
+    cmd_vx: float = 0.6 
+    device: str = "cuda:0"
 
-import math
-from copy import deepcopy
+def run_gait_test(task: str, cfg: GaitTestConfig):
+    configure_torch_backends()
+    
+    # Load Env Config (It will load whatever is currently in env_cfgs.py)
+    env_cfg = load_env_cfg(task)
+    
+    # Apply standard overrides (Noise/Terrain)
+    env_cfg.episode_length_s = int(1e9)
+    if "policy" in env_cfg.observations: env_cfg.observations["policy"].enable_corruption = False
+    if env_cfg.events: env_cfg.events.pop("push_robot", None)
+    if env_cfg.scene.terrain: 
+        env_cfg.scene.terrain.terrain_type = "plane"
+        env_cfg.scene.terrain.terrain_generator = None
+    
+    env_cfg.scene.num_envs = 1
+    
+    # Create Env
+    env = ManagerBasedRlEnv(cfg=env_cfg, device=cfg.device)
+    agent_cfg = load_rl_cfg(task)
+    env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
-from mjlab.entity.entity import EntityCfg
-from mjlab.envs import ManagerBasedRlEnvCfg
-from mjlab.envs.mdp.actions import JointPositionActionCfg
-from mjlab.managers.manager_term_config import (
-    ActionTermCfg,
-    CommandTermCfg,
-    CurriculumTermCfg,
-    EventTermCfg,
-    ObservationGroupCfg,
-    ObservationTermCfg,
-    RewardTermCfg,
-    TerminationTermCfg,
-)
-from mjlab.managers.scene_entity_config import SceneEntityCfg
-from mjlab.scene import SceneCfg
-from mjlab.sensor import ContactSensorCfg
-from mjlab.sim import MujocoCfg, SimulationCfg
-from mjlab.tasks.velocity import mdp
-from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
-from mjlab.terrains import TerrainImporterCfg
-from mjlab.terrains.config import ROUGH_TERRAINS_CFG
-from mjlab.utils.noise import UniformNoiseCfg as Unoise
-from mjlab.viewer import ViewerConfig
+    # Load Policy
+    resume_path = Path(cfg.checkpoint_file)
+    print(f"[INFO] Loading checkpoint: {resume_path.name}")
+    runner = OnPolicyRunner(env, asdict(agent_cfg), log_dir=str(resume_path.parent), device=cfg.device)
+    runner.load(str(resume_path), map_location=cfg.device)
+    policy = runner.get_inference_policy(device=cfg.device)
 
-SCENE_CFG = SceneCfg(
-    terrain=TerrainImporterCfg(
-        terrain_type="generator",
-        terrain_generator=ROUGH_TERRAINS_CFG,
-        max_init_terrain_level=5,
-    ),
-    num_envs=1,
-    extent=2.0,
-)
+    # Track Foot
+    robot = env.unwrapped.scene["robot"]
+    try:
+        fl_id = robot.find_sites(next(n for n in robot.site_names if "FL" in n))[0][0]
+    except: fl_id = 0
 
-VIEWER_CONFIG = ViewerConfig(
-    origin_type=ViewerConfig.OriginType.ASSET_BODY,
-    asset_name="robot",
-    body_name="",  # Override in robot cfg.
-    distance=3.0,
-    elevation=-5.0,
-    azimuth=90.0,
-)
+    # Run Loop
+    print(f"[INFO] Running Gait Test (Cmd Vx={cfg.cmd_vx})...")
+    obs, _ = env.reset()
+    heights = []
+    
+    with torch.no_grad():
+        for _ in range(150):
+            cmd = env.unwrapped.command_manager.get_command("twist")
+            cmd[:] = torch.tensor([cfg.cmd_vx, 0.0, 0.0], device=cfg.device).unsqueeze(0)
+            action = policy(obs)
+            obs, _, _, _ = env.step(action)
+            heights.append(robot.data.site_pos_w[0, fl_id, 2].item())
 
-SIM_CFG = SimulationCfg(
-    nconmax=35,
-    njmax=300,
-    mujoco=MujocoCfg(
-        timestep=0.005,
-        iterations=10,
-        ls_iterations=20,
-    ),
-)
+    env.close()
 
+    # Save Data
+    np.savez(f"gait_data_{cfg.label}.npz", time=np.arange(len(heights))*0.02, height=heights, label=cfg.label)
+    
+    # Plot
+    files = glob.glob("gait_data_*.npz")
+    plt.figure(figsize=(10,6))
+    for f in files:
+        d = np.load(f)
+        plt.plot(d['time'], d['height'], label=str(d['label']))
+    plt.axhline(0.1, color='k', linestyle=':')
+    plt.legend()
+    plt.savefig("deliverable_2_1_gait_plot.png")
 
-def create_velocity_env_cfg(
-        robot_cfg: EntityCfg,
-        action_scale: float | dict[str, float],
-        viewer_body_name: str,
-        site_names: tuple[str, ...],
-        feet_sensor_cfg: ContactSensorCfg,
-        self_collision_sensor_cfg: ContactSensorCfg,
-        foot_friction_geom_names: tuple[str, ...] | str,
-        posture_std_standing: dict[str, float],
-        posture_std_walking: dict[str, float],
-        posture_std_running: dict[str, float],
-) -> ManagerBasedRlEnvCfg:
-    """Create a velocity locomotion task configuration.
+def main():
+    task, args = tyro.cli(tyro.extras.literal_type_from_choices(list_tasks()), return_unknown_args=True)
+    cfg = tyro.cli(GaitTestConfig, args=args)
+    run_gait_test(task, cfg)
 
-    Args:
-      robot_cfg: Robot configuration (with sensors).
-      action_scale: Action scaling factor(s).
-      viewer_body_name: Body for camera tracking.
-      site_names: List of site names for foot height/clearance.
-      feet_sensor_cfg: Contact sensor config for feet-ground contact.
-      self_collision_sensor_cfg: Contact sensor config for self-collision.
-      foot_friction_geom_names: Geometry names for friction randomization.
-      posture_std_standing: Joint std devs for standing posture reward.
-      posture_std_walking: Joint std devs for walking posture reward.
-      posture_std_running: Joint std devs for running posture reward.
-
-    Returns:
-      Complete ManagerBasedRlEnvCfg for velocity task.
-    """
-    scene = deepcopy(SCENE_CFG)
-
-    scene.entities = {"robot": robot_cfg}
-
-    scene.sensors = (
-        feet_sensor_cfg,
-        self_collision_sensor_cfg,
-    )
-
-    # Enable curriculum mode for terrain generator.
-    if scene.terrain is not None and scene.terrain.terrain_generator is not None:
-        scene.terrain.terrain_generator.curriculum = True
-
-    viewer = deepcopy(VIEWER_CONFIG)
-    viewer.body_name = viewer_body_name
-
-    # Actions are provided for you.
-    actions: dict[str, ActionTermCfg] = {
-        "joint_pos": JointPositionActionCfg(
-            asset_name="robot",
-            actuator_names=(".*",),
-            scale=action_scale,
-            use_default_offset=True,
-        )
-    }
-
-    # ---------------------------------------------------------------------------
-    # Part2 (b) Specify command
-    # ---------------------------------------------------------------------------
-    # TODO(b): define command(s) for the velocity tracking task.
-    # The task is to track a desired linear and yaw velocity (twist).
-    # Hint: use a `UniformVelocityCommandCfg`.
-    commands: dict[str, CommandTermCfg] = {
-        "twist": UniformVelocityCommandCfg(
-            asset_name="robot",
-            resampling_time_range=(3.0, 8.0),
-
-            rel_standing_envs=0.1,
-            rel_heading_envs=0.3,
-
-            heading_command=True,
-            heading_control_stiffness=1.0,
-
-            ranges=UniformVelocityCommandCfg.Ranges(
-                lin_vel_x=(-1.0, 1.0),
-                lin_vel_y=(-1.0, 1.0),
-                ang_vel_z=(-1.0, 1.0),
-                heading=(-math.pi, math.pi),
-            ),
-            debug_vis=True,
-        )
-    }
-
-    # ---------------------------------------------------------------------------
-    # Part2 (f) Writing observations
-    # ---------------------------------------------------------------------------
-    # TODO(f): define observation terms for the policy and critic.
-    # Hint: include IMU linear/angular velocities, projected gravity,
-    # joint positions/velocities, last actions, and the command.
-    # Joint positions are provided as a reference.
-    policy_terms: dict[str, ObservationTermCfg] = {
-        "joint_pos": ObservationTermCfg(
-            func=mdp.joint_pos_rel,
-            noise=Unoise(n_min=-0.01, n_max=0.01),  # Define sensor noise range
-        ),
-        "base_lin_vel": ObservationTermCfg(
-            func=mdp.base_lin_vel,
-            noise=Unoise(n_min=-0.5, n_max=0.5),
-        ),
-        "base_ang_vel": ObservationTermCfg(
-            func=mdp.base_ang_vel,
-            noise=Unoise(n_min=-0.2, n_max=0.2),
-        ),
-        "projected_gravity": ObservationTermCfg(
-            func=mdp.projected_gravity,
-            noise=Unoise(n_min=-0.05, n_max=0.05),
-        ),
-        "joint_vel": ObservationTermCfg(
-            func=mdp.joint_vel_rel,
-            noise=Unoise(n_min=-1.5, n_max=1.5),
-        ),
-        "actions": ObservationTermCfg(
-            func=mdp.last_action,
-        ),
-        "commands": ObservationTermCfg(
-            func=mdp.generated_commands,
-            params={"command_name": "twist"},
-        )
-
-    }
-
-    critic_terms = {
-        **policy_terms,
-        # ---------------------------------------------------------------------------
-        # Part3 (b) Writing asymmetric critic -- extra critic observations
-        # ---------------------------------------------------------------------------
-        # TODO(b): add extra observations for the critic here.
-        # Hint: Consider gait information such as foot contact, air time, or height.
-        # "feet_height": ObservationTermCfg(
-        #     func=mdp.foot_height,
-        #     params={
-        #         "asset_cfg": SceneEntityCfg("robot", site_names=site_names),
-        #     },
-        # ),
-
-        # "feet_air_time": ObservationTermCfg(
-        #     func=mdp.foot_air_time,
-        #     params={
-        #         "sensor_name": feet_sensor_cfg.name,
-        #     },
-        # ),
-
-        # "feet_contact": ObservationTermCfg(
-        #     func=mdp.foot_contact_forces,
-        #     params={
-        #         "sensor_name": feet_sensor_cfg.name,
-        #     },
-        # ),
-
-    }
-
-    observations = {
-        "policy": ObservationGroupCfg(
-            terms=policy_terms,
-            concatenate_terms=True,
-            enable_corruption=True,
-        ),
-        "critic": ObservationGroupCfg(
-            terms=critic_terms,
-            concatenate_terms=True,
-            enable_corruption=False,
-        ),
-
-    }
-
-    # ---------------------------------------------------------------------------
-    # Events (reset, pushes, domain randomization)
-    # ---------------------------------------------------------------------------
-    events = {
-        # Reset functions for the start of an episode are provided for you.
-        # Reset the base position and orientation is necessary because the robot's initial state can vary in the environment.
-        "reset_base": EventTermCfg(
-            func=mdp.reset_root_state_uniform,
-            mode="reset",
-            params={
-                "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
-                "velocity_range": {},
-            },
-        ),
-        # Reset the robot joints to a default position at the start of an episode.
-        "reset_robot_joints": EventTermCfg(
-            func=mdp.reset_joints_by_offset,
-            mode="reset",
-            params={
-                "position_range": (0.0, 0.0),
-                "velocity_range": (0.0, 0.0),
-                "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
-            },
-        ),
-        # -------------------------------------------------------------------------
-        # Part2 (g) Domain Randomization
-        # -------------------------------------------------------------------------
-        # TODO(g): add domain randomization event(s).
-
-        # (1) Randomize the ground friction of the feet using `mdp.randomize_field`.
-        "foot_friction": EventTermCfg(
-            mode="startup",
-            func=mdp.randomize_field,
-            domain_randomization=True,
-            params={
-                "asset_cfg": SceneEntityCfg("robot", geom_names=".*"),
-                "field": "geom_friction",
-                "ranges": (0.3, 1.2),
-            }
-        ),
-
-        # (2) Add random velocity perturbations to the base to learn recovery behaviorusing `mdp.push_by_setting_velocity`.
-        "push_robot": EventTermCfg(
-            func=mdp.push_by_setting_velocity,
-            mode="interval",
-            interval_range_s=(1.0, 3.0),
-            params={
-                "velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)},
-            }
-        ),
-    }
-
-    # ---------------------------------------------------------------------------
-    # Rewards
-    # ---------------------------------------------------------------------------
-    rewards = {
-        # -------------------------------------------------------------------------
-        # Part2 (c) Writing objectives (main task objectives)
-        # -------------------------------------------------------------------------
-        # TODO(c): add objective reward terms.
-        # Hint: track commanded linear and angular velocity.
-
-        "track_linear_velocity": RewardTermCfg(
-            func=mdp.track_linear_velocity,
-            weight=2.0,
-            params={
-                "std": 0.5,
-                "command_name": "twist"
-            },
-        ),
-        "track_angular_velocity": RewardTermCfg(
-            func=mdp.track_angular_velocity,
-            weight=2.0,
-            params={
-                "std": 0.5,
-                "command_name": "twist"
-            },
-        ),
-
-        # -------------------------------------------------------------------------
-        # Part2 (d) Writing regularization
-        # -------------------------------------------------------------------------
-        # TODO(d): add regularization rewards.
-        # Regularizations are necessary to induce more smooth, natural and realistic behavior.
-        # For more realistic behavior, add terms such as:
-        # 1. encouraging the robot to remain upright with mdp.flat_orientation
-        # 2. penalizing large deviations from default joint positions
-
-        "upright": RewardTermCfg(
-            func=mdp.flat_orientation,
-            weight=1.0,
-            params={
-                "std": math.sqrt(0.2),
-                "asset_cfg": SceneEntityCfg("robot", body_names="trunk")
-            },
-        ),
-        "default_joint_pos": RewardTermCfg(
-            func=mdp.default_joint_position,
-            weight=-0.1,
-            params={
-                "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
-            },
-        ),
-        # To prevent reaching physical limits and encourage smooth actions, consider adding terms such as:
-        # 3. penalizing norm of action rate
-        # 4. penalizing reaching the joint position limits
-        "action_rate": RewardTermCfg(
-            func=mdp.action_rate_l2,
-            weight=-0.1,
-        ),
-        "dof_pos_limits": RewardTermCfg(
-            func=mdp.joint_pos_limits,
-            weight=-1.0,
-            params={
-                "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
-            },
-        ),
-        # -------------------------------------------------------------------------
-        # Part3 (a) Writing gait terms
-        # -------------------------------------------------------------------------
-        # TODO(a): add gait-related rewards.
-        # Even though with the above rewards, the robot can already walk nicely, its gait is not the most desirable,
-        # i.e. you can observe significant feet dragging and sometimes slipping.
-        # These all create sim-to-real gap because where the robot's feet contact the ground is not perfectly simulated.
-        # Thus, we design gait rewards to encourage feet clearance (so that the feet lift sufficiently during walking to avoid dragging) and penalize foot slip.
-
-        # Hint: Consider adding the following gait-related rewards:
-        # 1. foot_clearance with mdp.feet_clearance
-        # 2. foot_swing_height with mdp.feet_swing_height
-        # 3. foot_slip with mdp.feet_slip
-
-        "foot_clearance": RewardTermCfg(
-            func=mdp.feet_clearance,
-            weight=-2.0,
-            params={
-                "target_height": 0.1,
-                "command_threshold": 0.05,
-                "asset_cfg": SceneEntityCfg("robot", site_names=site_names),
-            },
-        ),
-
-        "foot_swing_height": RewardTermCfg(
-            func=mdp.feet_swing_height,
-            weight=-0.25,
-            params={
-                "target_height": 0.1,
-                "command_threshold": 0.01,
-                "command_name": "twist",
-                "sensor_name": feet_sensor_cfg.name,
-                "asset_cfg": SceneEntityCfg("robot", site_names=site_names),
-            },
-        ),
-        "foot_slip": RewardTermCfg(
-            func=mdp.feet_slip,
-            weight=-0.1,  #
-            params={
-                "command_threshold": 0.01,
-                "command_name": "twist",
-                "sensor_name": feet_sensor_cfg.name,
-                "asset_cfg": SceneEntityCfg("robot", site_names=site_names),
-            },
-        ),
-
-    }
-
-    # ---------------------------------------------------------------------------
-    # Part2 (e) Writing terminations
-    # ---------------------------------------------------------------------------
-    # TODO(e): define termination conditions.
-    # Detect a fall-over / bad-orientation check to avoid continue sampling the environment when the robot is already fallen.
-    # Hint: Use mdp.bad_orientation with a threshold of 60 degrees.
-    terminations = {
-        "time_out": TerminationTermCfg(
-            func=mdp.time_out,
-            time_out=True,
-        ),
-        "fell_over": TerminationTermCfg(
-            func=mdp.bad_orientation,
-            time_out=False,
-            params={
-                "limit_angle": 60 * math.pi / 180
-            },
-        ),
-    }
-
-    return ManagerBasedRlEnvCfg(
-        scene=scene,
-        observations=observations,
-        actions=actions,
-        commands=commands,
-        rewards=rewards,
-        terminations=terminations,
-        events=events,
-        sim=SIM_CFG,
-        viewer=viewer,
-        decimation=4,
-        episode_length_s=20.0,
-    )
+if __name__ == "__main__":
+    main()
