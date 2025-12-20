@@ -89,7 +89,7 @@ def create_backflip_env_cfg(  # Renamed function
     "backflip_ref": mdp.BackflipCommandCfg( 
       asset_name="robot",
       resampling_time_range=(3.0, 5.0), # Time between flips
-      jump_height=0.5,                  # Target height
+      ranges=mdp.BackflipCommandCfg.Ranges(jump_height=(0.5, 0.7)),                  # Target height
       # The command generator should output: [target_height, target_pitch, phase]
       debug_vis=True,
     )
