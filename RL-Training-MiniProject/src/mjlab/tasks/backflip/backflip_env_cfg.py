@@ -193,10 +193,10 @@ def create_backflip_env_cfg(
 
     "feet_airborne": RewardTermCfg(
         func=mdp.feet_airborne,
-        weight=2.0,  # Positive weight to encourage jumping
+        weight=5.0,  # Positive weight to encourage jumping
         params={"sensor_name": feet_sensor_cfg.name},
     ),
-    
+
     # 3. Stability / Orientation
     # Helps the robot land flat instead of sideways/tilted
     "flat_orientation": RewardTermCfg(
