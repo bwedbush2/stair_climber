@@ -20,17 +20,15 @@ from mjlab.scene import SceneCfg
 from mjlab.sensor import ContactSensorCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
 from mjlab.tasks.backflip import mdp 
-from mjlab.tasks.backflip.mdp import BackflipCommandCfg
 from mjlab.terrains import TerrainImporterCfg
 from mjlab.terrains.config import ROUGH_TERRAINS_CFG
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.viewer import ViewerConfig
 
 # --- SCENE CONFIGURATION ---
-# Use flat terrain for backflip training to reduce complexity
 SCENE_CFG = SceneCfg(
   terrain=TerrainImporterCfg(
-    terrain_type="plane", # Changed from "generator" to "plane" for stable jumping
+    terrain_type="plane", 
   ),
   num_envs=1,
   extent=2.0,
@@ -55,14 +53,13 @@ SIM_CFG = SimulationCfg(
   ),
 )
 
-def create_backflip_env_cfg(  # Renamed function
+def create_backflip_env_cfg(
   robot_cfg: EntityCfg,
   action_scale: float | dict[str, float],
   viewer_body_name: str,
   site_names: tuple[str, ...],
   feet_sensor_cfg: ContactSensorCfg,
   self_collision_sensor_cfg: ContactSensorCfg,
-  # Removed unused posture args for clarity, or you can keep them if you wish
 ) -> ManagerBasedRlEnvCfg:
   
   scene = deepcopy(SCENE_CFG)
@@ -77,25 +74,24 @@ def create_backflip_env_cfg(  # Renamed function
     "joint_pos": JointPositionActionCfg(
       asset_name="robot",
       actuator_names=(".*",),
-      scale=action_scale,
+      # Scale 0.8 is critical for explosive movement (Backflip needs this high)
+      scale=0.8,  
       use_default_offset=True,
     )
   }
 
-  # --- COMMANDS (Part 3b) ---
-  # The robot needs to know the target height/pitch over time.
-  # You must implement `BackflipCommandCfg` in your command generator file.
+  # --- COMMANDS ---
   commands: dict[str, CommandTermCfg] = {
     "backflip_ref": mdp.BackflipCommandCfg( 
       asset_name="robot",
-      resampling_time_range=(3.0, 5.0), # Time between flips
-      ranges=mdp.BackflipCommandCfg.Ranges(jump_height=(0.5, 0.7)),                  # Target height
-      # The command generator should output: [target_height, target_pitch, phase]
+      # Note: Ensure your backflip_command.py has cycle_time=2.0 as discussed
+      resampling_time_range=(3.0, 5.0), 
+      ranges=mdp.BackflipCommandCfg.Ranges(jump_height=(0.5, 0.7)),
       debug_vis=True,
     )
   }
 
-  # --- OBSERVATIONS (Part 3b) ---
+  # --- OBSERVATIONS ---
   policy_terms: dict[str, ObservationTermCfg] = {
     "joint_pos": ObservationTermCfg(
       func=mdp.joint_pos_rel,
@@ -120,19 +116,26 @@ def create_backflip_env_cfg(  # Renamed function
     "actions": ObservationTermCfg(
       func=mdp.last_action,
     ),
-    # CRITICAL: The policy must know the target state (height/pitch) or phase
     "commands": ObservationTermCfg(
       func=mdp.generated_commands,
       params={"command_name": "backflip_ref"},
     )
   }
 
-  # Critic sees the same (or privileged info if you want to add it like in Part 2)
   critic_terms = {**policy_terms}
 
   observations = {
-    "policy": ObservationGroupCfg(terms=policy_terms, concatenate_terms=True, enable_corruption=True),
-    "critic": ObservationGroupCfg(terms=critic_terms, concatenate_terms=True, enable_corruption=False),
+    "policy": ObservationGroupCfg(
+        terms=policy_terms, 
+        concatenate_terms=True, 
+        # Disable noise so the robot can sense precise timing
+        enable_corruption=False 
+    ),
+    "critic": ObservationGroupCfg(
+        terms=critic_terms, 
+        concatenate_terms=True, 
+        enable_corruption=False
+    ),
   }
 
   # --- EVENTS ---
@@ -141,7 +144,7 @@ def create_backflip_env_cfg(  # Renamed function
       func=mdp.reset_root_state_uniform,
       mode="reset",
       params={
-        "pose_range": {"x": (-0.1, 0.1), "y": (-0.1, 0.1), "yaw": (-0.1, 0.1)}, # Tighter reset for backflip
+        "pose_range": {"x": (-0.1, 0.1), "y": (-0.1, 0.1), "yaw": (-0.1, 0.1)}, 
         "velocity_range": {},
       },
     ),
@@ -154,7 +157,6 @@ def create_backflip_env_cfg(  # Renamed function
         "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
       },
     ),
-    # Reduce domain randomization initially to make learning easier
     "foot_friction": EventTermCfg(
       mode="startup",
       func=mdp.randomize_field,
@@ -162,71 +164,75 @@ def create_backflip_env_cfg(  # Renamed function
       params={
         "asset_cfg": SceneEntityCfg("robot", geom_names=".*"),
         "field": "geom_friction",
-        "ranges": (0.5, 1.0), # Slightly higher min friction for jumping grip
+        "ranges": (0.5, 1.0),
       }
     ),
   }
 
-  # --- REWARDS (Part 3b) ---
+  # --- REWARDS ---
   rewards = {
-    # 1. Trajectory Tracking (The "Core" task) [cite: 326, 328, 458]
-    # Replaces track_linear_velocity/track_angular_velocity
+    # 1. Primary Task: High Weights to force the jump
     "track_height": RewardTermCfg(
-        func=mdp.track_base_height, # From your updated rewards.py
-        weight=2.0,
+        func=mdp.track_base_height, 
+        weight=15.0,
         params={"std": 0.2, "command_name": "backflip_ref"},
     ),
     "track_pitch": RewardTermCfg(
-        func=mdp.track_base_pitch, # From your updated rewards.py
-        weight=2.0,
+        func=mdp.track_base_pitch, 
+        weight=15.0,
         params={"std": 0.2, "command_name": "backflip_ref"},
     ),
 
-    # 2. Constraints (Keep the flip vertical and safe)
+    # 2. Collision Penalty (The Anti-Belly-Flop Reward)
+    # FIX APPLIED: Removed 'threshold' parameter
+    "body_collision": RewardTermCfg(
+        func=mdp.illegal_contact, 
+        weight=-5.0,
+        params={"sensor_name": self_collision_sensor_cfg.name}, 
+    ),
+
+    "feet_airborne": RewardTermCfg(
+        func=mdp.feet_airborne,
+        weight=2.0,  # Positive weight to encourage jumping
+        params={"sensor_name": feet_sensor_cfg.name},
+    ),
+    
+    # 3. Stability / Orientation
+    # Helps the robot land flat instead of sideways/tilted
+    "flat_orientation": RewardTermCfg(
+        func=mdp.flat_orientation_l2,
+        weight=-1.0,
+    ),
     "penalize_xy_drift": RewardTermCfg(
-        func=mdp.penalize_xy_velocity, # From your updated rewards.py
+        func=mdp.penalize_xy_velocity, 
         weight=-0.5,
     ),
     "penalize_yaw_spin": RewardTermCfg(
-        func=mdp.penalize_yaw_velocity, # From your updated rewards.py
+        func=mdp.penalize_yaw_velocity, 
         weight=-0.5,
     ),
-    
-    # 3. Regularization (Smoothness and Landing)
     "soft_landing": RewardTermCfg(
         func=mdp.soft_landing,
         weight=-1.0,
         params={"sensor_name": feet_sensor_cfg.name},
     ),
-    "action_rate": RewardTermCfg(
-        func=mdp.action_rate_l2, 
-        weight=-0.05,
-    ),
+    
+    # 4. Limits (Low penalty to allow full extension)
     "dof_pos_limits": RewardTermCfg(
         func=mdp.joint_pos_limits, 
-        weight=-5.0, # Stronger penalty to prevent self-destruction
+        weight=-0.2, 
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
     ),
-    
-    # REMOVED: upright (flat_orientation), default_joint_pos (conflicts with tucking), gait shaping.
   }
 
-  # --- TERMINATIONS (Part 3e) ---
+  # --- TERMINATIONS ---
   terminations = {
     "time_out": TerminationTermCfg(
       func=mdp.time_out,
       time_out=True,
     ),
-    # REMOVED: "fell_over" / bad_orientation. 
-    # The robot MUST go upside down (pitch ~ 180 deg or 3.14 rad).
-    # If you keep bad_orientation, the episode will end exactly when the backflip succeeds.
-    
-    # OPTIONAL: Terminate if body (not feet) touches ground.
-    "illegal_contact": TerminationTermCfg(
-        func=mdp.illegal_contact, # Assuming standard MDP function
-        params={"sensor_name": self_collision_sensor_cfg.name, "threshold": 1.0},
-        time_out=False,
-    )
+    # DISABLED: illegal_contact termination so we don't reset mid-flip
+    # The 'body_collision' reward above handles the punishment now.
   }
 
   return ManagerBasedRlEnvCfg(
@@ -240,5 +246,5 @@ def create_backflip_env_cfg(  # Renamed function
     sim=SIM_CFG,
     viewer=viewer,
     decimation=4,
-    episode_length_s=5.0, # Short episodes for single flips
+    episode_length_s=5.0, 
   )

@@ -174,3 +174,28 @@ def angular_momentum_penalty(
   angmom_magnitude_sq = torch.sum(torch.square(angmom), dim=-1)
   env.extras["log"]["Metrics/angular_momentum_mean"] = torch.mean(torch.sqrt(angmom_magnitude_sq))
   return angmom_magnitude_sq
+
+def feet_airborne(
+    env: ManagerBasedRlEnv,
+    sensor_name: str,
+) -> torch.Tensor:
+    """
+    Rewards the robot when all feet are off the ground (flight phase).
+    This encourages the robot to jump high and tuck its legs.
+    """
+    contact_sensor: ContactSensor = env.scene[sensor_name]
+    
+    # Get contact forces [num_envs, num_feet, 3]
+    forces = contact_sensor.data.force
+    
+    # Calculate force magnitude per foot
+    force_mags = torch.norm(forces, dim=-1)
+    
+    # Check if feet are touching the ground (Force > 1.0 Newton)
+    in_contact = force_mags > 1.0
+    
+    # Count how many feet are in contact
+    num_contacts = torch.sum(in_contact.float(), dim=1)
+    
+    # Reward 1.0 if NO feet are touching the ground
+    return (num_contacts == 0).float()
